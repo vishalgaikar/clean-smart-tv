@@ -93,7 +93,7 @@ final class Backdrop {
         }
         Canvas c = new Canvas(out);
         if (forLight) {
-            // Light design: everything comes from the photo without scrims.
+            // Light design: cards + cinematic backdrop with soft gradients.
             Bitmap wide = card(out, WIDE_W, WIDE_H), tall = card(out, TALL_W, TALL_H);
             int[] frost = reduce(out, FW, FH, 3, 3);
             int[] light = whiten(frost.clone(), 0.82f);
@@ -107,8 +107,26 @@ final class Backdrop {
                 out.recycle();
                 return new Backdrop(null, frost, null, wide, tall, light, lightGlass, night, nightGlass, lightBg, nightBg, GW, GH);
             }
-            out.recycle();
-            return new Backdrop(null, frost, null, wide, tall, light, lightGlass, night, nightGlass);
+            // Apply soft cinematic gradients across the backdrop:
+            Paint scrim = new Paint(Paint.DITHER_FLAG);
+            // Left gradient: dark on left for title/desc/actions, fading to transparent on right:
+            scrim.setShader(new LinearGradient(0, 0, W * 0.72f, 0,
+                    new int[] {black(0.88f), black(0.72f), black(0.38f), black(0.10f), 0},
+                    new float[] {0, 0.28f, 0.58f, 0.82f, 1f}, Shader.TileMode.CLAMP));
+            c.drawRect(0, 0, W, H, scrim);
+            // Bottom gradient: behind the app shelf / dock:
+            scrim.setShader(new LinearGradient(0, H, 0, H * 0.45f,
+                    new int[] {black(0.92f), black(0.68f), black(0.25f), 0},
+                    new float[] {0, 0.35f, 0.72f, 1f}, Shader.TileMode.CLAMP));
+            c.drawRect(0, H * 0.45f, W, H, scrim);
+            // Top gradient: for greeting and tabs:
+            scrim.setShader(new LinearGradient(0, 0, 0, H * 0.26f,
+                    new int[] {black(0.55f), black(0.20f), 0},
+                    new float[] {0, 0.60f, 1f}, Shader.TileMode.CLAMP));
+            c.drawRect(0, 0, W, H * 0.26f, scrim);
+
+            Bitmap bg = gpu(out);
+            return new Backdrop(bg, frost, glass, wide, tall, light, lightGlass, night, nightGlass);
         }
 
         float boost = Math.max(0, Math.min(0.3f, (luminance(out, 0, 0.22f, 0.5f, 0.62f) - 0.22f) * 1.1f));

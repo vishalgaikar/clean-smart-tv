@@ -137,16 +137,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Shader nightGradient;
 
     // At the top: tabs (0 to 2) and icon-only buttons (3 to 5); the three cards
-    private int tab, topIndex, cardIndex;
+    private int tab, topIndex, cardIndex, featuredIndex;
     private int widgetIndex;    // with TalkBack on, the drawer's weather (0) or quotes (1) card can take the focus
     private List<Recs.Pick> cards = new ArrayList<>();
     // The three tabs, then the round buttons at the top right (up to HomeApps.MAX_TOP).
     private final Spring[] topFocus = new Spring[3 + HomeApps.MAX_TOP];
     private final RectF[] topRects = new RectF[3 + HomeApps.MAX_TOP];
-    private final Spring[] cardFocus = new Spring[3];
-    private final RectF[] cardRects = new RectF[3];
+    private final Spring[] cardFocus = new Spring[4];
+    private final RectF[] cardRects = new RectF[4];
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
-    private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip, lDate, lClock, lWeather, lClockQuote;
+    private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip, lDate, lClock, lWeather, lClockQuote, lHeroMeta, lHeroBtnText;
+    private TextPaint lHeroTitle, lHeroDesc;
     private Shader lightGradient;
 
     // Shelf
@@ -411,7 +412,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
             topRects[i] = new RectF();
         }
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             cardFocus[i] = new Spring(0.32f, 0.78f, 0);
             cardRects[i] = new RectF();
         }
@@ -636,6 +637,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lClock.setLetterSpacing(-0.01f);
         lWeather = Ui.text(Ui.medium, 34 * k, L_DIM);
         lClockQuote = Ui.numbers(Ui.medium, 28 * k, L_DIM);
+        lHeroTitle = new TextPaint(Ui.text(Ui.displaySemibold, 44 * k, 0xFFFFFFFF));
+        lHeroTitle.setShadowLayer(16 * k, 0, 3 * k, 0xCC000000);
+        lHeroMeta = Ui.text(Ui.medium, 23 * k, 0xD9FFFFFF);
+        lHeroMeta.setShadowLayer(10 * k, 0, 2 * k, 0x99000000);
+        lHeroDesc = new TextPaint(Ui.text(Ui.regular, 20 * k, 0xC7FFFFFF));
+        lHeroDesc.setShadowLayer(10 * k, 0, 2 * k, 0x99000000);
+        lHeroBtnText = Ui.text(Ui.semibold, 21 * k, 0xFFFFFFFF);
         lightGradient = null;
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
         capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
@@ -2292,14 +2300,43 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             it = lightButtons.get(topIndex - 3);
             r = topRects[topIndex];
         } else if (zone == Z_CARDS) {
-            Recs.Pick p = cardIndex < cards.size() ? cards.get(cardIndex) : null;
-            if (p == null || p.pkg == null) return;
-            String pkg = p.pkg;
-            if ("com.netflix.ninja".equals(pkg) && HomeApps.launchIntent(getContext().getPackageManager(), "app.netmirror.newtv") != null) {
-                pkg = "app.netmirror.newtv";
+            Recs.Pick featured = cards.isEmpty() ? null : cards.get(Math.min(featuredIndex, cards.size() - 1));
+            if (cardIndex == 0) {
+                if (featured == null || featured.pkg == null) return;
+                String pkg = featured.pkg;
+                if ("com.netflix.ninja".equals(pkg) && HomeApps.launchIntent(getContext().getPackageManager(), "app.netmirror.newtv") != null) {
+                    pkg = "app.netmirror.newtv";
+                }
+                it = HomeApps.app(pkg, Recs.serviceName(featured), featured.link);
+                r = cardRects[0];
+            } else if (cardIndex == 1) {
+                if (featured != null) {
+                    String overview = featured.overview != null && !featured.overview.trim().isEmpty() ? featured.overview.trim() : "No synopsis available.";
+                    String details = featured.title + (featured.meta != null && !featured.meta.isEmpty() ? " · " + featured.meta : "") + "\n\n" + overview;
+                    showToast(details);
+                }
+                return;
+            } else if (cardIndex == 2 && cards.size() > 1) {
+                Recs.Pick p = cards.get(1);
+                if (p.pkg == null) return;
+                String pkg = p.pkg;
+                if ("com.netflix.ninja".equals(pkg) && HomeApps.launchIntent(getContext().getPackageManager(), "app.netmirror.newtv") != null) {
+                    pkg = "app.netmirror.newtv";
+                }
+                it = HomeApps.app(pkg, Recs.serviceName(p), p.link);
+                r = cardRects[2];
+            } else if (cardIndex == 3 && cards.size() > 2) {
+                Recs.Pick p = cards.get(2);
+                if (p.pkg == null) return;
+                String pkg = p.pkg;
+                if ("com.netflix.ninja".equals(pkg) && HomeApps.launchIntent(getContext().getPackageManager(), "app.netmirror.newtv") != null) {
+                    pkg = "app.netmirror.newtv";
+                }
+                it = HomeApps.app(pkg, Recs.serviceName(p), p.link);
+                r = cardRects[3];
+            } else {
+                return;
             }
-            it = HomeApps.app(pkg, Recs.serviceName(p), p.link);
-            r = cardRects[cardIndex];
         } else {
             if (shelf.isEmpty()) return;
             it = shelf.get(shelfIndex);
@@ -2801,38 +2838,49 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
             right -= b + L_BUTTON_GAP * k;
         }
-        float top = L_CARDS_TOP * k, ch = L_CARD_H * k, g = L_CARD_GAP * k, left = MARGIN * k, tall = L_TALL_W * k;
-        float wide = (CONTENT_R - MARGIN) * k - 2 * tall - 2 * g;
-        cardRects[0].set(left, top, left + wide, top + ch);
-        cardRects[1].set(cardRects[0].right + g, top, cardRects[0].right + g + tall, top + ch);
-        cardRects[2].set(cardRects[1].right + g, top, cardRects[1].right + g + tall, top + ch);
+
+        // Action buttons on the left
+        float btnY = 590 * k, btnW = 150 * k, btnH = 48 * k, btnGap = 16 * k;
+        cardRects[0].set(MARGIN * k, btnY, MARGIN * k + btnW, btnY + btnH);
+        cardRects[1].set(cardRects[0].right + btnGap, btnY, cardRects[0].right + btnGap + btnW, btnY + btnH);
+
+        // Featured preview cards on the right
+        float cardTop = 260 * k, cardH = 410 * k, cardW = 290 * k, cardGap = 24 * k;
+        cardRects[3].set(CONTENT_R * k - cardW, cardTop, CONTENT_R * k, cardTop + cardH);
+        cardRects[2].set(cardRects[3].left - cardGap - cardW, cardTop, cardRects[3].left - cardGap, cardTop + cardH);
+
         for (RectF r : cardRects) snap(r);
         for (HomeApps.Item it : lightButtons) {
             Symbols.warm(getContext(), it.symbol, 27 * k);
             Symbols.warm(getContext(), it.symbol, 27 * k * 1.1f);
         }
+        Symbols.warm(getContext(), "play", 24 * k);
+        Symbols.warm(getContext(), "play", 24 * k * 1.05f);
+        Symbols.warm(getContext(), "sparkles", 24 * k);
+        Symbols.warm(getContext(), "sparkles", 24 * k * 1.05f);
         Symbols.warmWeather(getContext(), 40 * k);
         heroDirty = statusDirty = true;
     }
 
-    /** The three cards of the current tab (Explore, Movies, Shows) and the background taken from the first one. */
+    /** The featured shows of the current tab (Explore, Movies, Shows) and the cinematic background. */
     private void updateCards() {
         List<Recs.Pick> list = recs.now(TAB_KIND[tab]);
         if (!samePicks(list, cards)) {
             cards = list;
-            cardIndex = Math.min(cardIndex, Math.max(0, list.size() - 1));
+            featuredIndex = 0;
+            cardIndex = 0;
             if (zone == Z_CARDS && list.isEmpty()) {
                 zone = Z_SHELF;
                 retarget(false);
             }
         }
-        for (Recs.Pick p : recs.wanted()) recs.backdrop(p);   // all three tabs preloaded: switching tabs is instant
-        // Picks bring their own background; without them (no TMDB key), your photo if there is one.
+        for (Recs.Pick p : recs.wanted()) recs.backdrop(p);
         boolean own = !picksOn() && Photos.on(getContext());
-        Backdrop b = own ? Photos.backdrop(getContext(), ownReady) : cards.isEmpty() ? null : recs.backdrop(cards.get(0));
+        Recs.Pick featured = cards.isEmpty() ? null : cards.get(Math.min(featuredIndex, cards.size() - 1));
+        Backdrop b = own ? Photos.backdrop(getContext(), ownReady) : featured == null ? null : recs.backdrop(featured);
         if (b != null || (cards.isEmpty() && !own)) showBackdrop(b);
         heroDirty = true;
-        spoken.focusMoved();    // new picks under the focused card
+        spoken.focusMoved();
     }
 
     /** Your photo's background is ready (or new photos came in): draw it. */
@@ -2843,35 +2891,26 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void selectTab(int index) {
         if (index == tab) return;
         tab = index;
+        featuredIndex = 0;
+        cardIndex = 0;
         updateCards();
         heroDirty = true;
     }
 
     /**
-     * Background: the first card's photo, heavily blurred and almost white; without it, a light gradient. At night, the
-     * same photo almost black (or a dark gradient), drawn on top during the transition.
+     * Background: the featured show's full cinematic artwork with a soft gradient scrim; without it, a dark gradient.
      */
     private void drawLightSky(Canvas c) {
         long up = SystemClock.uptimeMillis();
         float e = bgFadeAt == 0 ? 1 : fadeEase(bgFadeAt, up);
         boolean fading = bgFadeAt != 0;
-        // Drawer open: the background lightens (by day) or darkens (at night), as a filter on the drawing itself.
         android.graphics.ColorFilter v = veil(tone(0.32f, 0.42f) * Ui.clamp(drawer.value), blend(0xFFFFFFFF, 0xFF000000, night));
         if (bgTo == null || (fading && bgFrom == null)) {
-            if (lightGradient == null) lightGradient = Ui.gradient(h, 0xFFF5F5F7, 0xFFE2E2E7);
-            if (nightGradient == null) nightGradient = Ui.gradient(h, 0xFF1C1C1E, 0xFF0B0B0D);
+            if (nightGradient == null) nightGradient = Ui.gradient(h, 0xFF141416, 0xFF08080A);
             fill.setColorFilter(v);
             fill.setColor(0xFF000000);
-            if (night < 0.999f) {
-                fill.setShader(lightGradient);
-                c.drawRect(screen, fill);
-            }
-            if (night > 0.001f) {
-                fill.setShader(nightGradient);
-                fill.setAlpha(Math.round(255 * night));
-                c.drawRect(screen, fill);
-                fill.setAlpha(255);
-            }
+            fill.setShader(nightGradient);
+            c.drawRect(screen, fill);
             fill.setShader(null);
             fill.setColorFilter(null);
         }
@@ -2882,8 +2921,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void drawLightImage(Canvas c, Backdrop b, float alpha) {
-        if (night < 0.999f || b.nightImage == null) drawImage(c, b.lightImage, alpha);
-        if (night > 0.001f) drawImage(c, b.nightImage, alpha * night);
+        if (b.image != null) {
+            drawImage(c, b.image, alpha);
+        } else {
+            if (night < 0.999f || b.nightImage == null) drawImage(c, b.lightImage, alpha);
+            if (night > 0.001f) drawImage(c, b.nightImage, alpha * night);
+        }
     }
 
     private void drawLightTop(Canvas c) {
@@ -2895,8 +2938,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         String hello = getGreeting();
         c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
-        // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
-        // the white pill with a shadow and grows a little (the tvOS focus).
+        // Text tabs
         float focus = Ui.clamp(topFocus[tab].value);
         for (int i = 0; i < 3; i++) {
             RectF r = topRects[i];
@@ -2916,14 +2958,154 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawRoundRect(cell, rr, rr, fill);
             }
             Paint p = i == tab ? lTabOn : lTab;
-            if (i == tab) lTabOn.setColor(blend(tone(L_INK, WHITE), L_INK, focus));   // always dark on the white pill
+            if (i == tab) lTabOn.setColor(blend(tone(L_INK, WHITE), L_INK, focus));
             c.drawText(tabs()[i], r.centerX() - p.measureText(tabs()[i]) / 2, r.centerY() + Ui.halfCap(p), p);
         }
-        int top = -1;
-        for (int i = 0; i < 3; i++) if (cardFocus[i].value > 0.02f && (top < 0 || cardFocus[i].value > cardFocus[top].value)) top = i;
-        for (int i = 0; i < 3; i++) if (i != top) drawLightCard(c, i);
-        if (top >= 0) drawLightCard(c, top);
+
+        // Draw Cinematic Hero Info on Left:
+        Recs.Pick featured = cards.isEmpty() ? null : cards.get(Math.min(featuredIndex, cards.size() - 1));
+        if (featured != null) {
+            float heroX = MARGIN * k;
+            float titleY = 275 * k;
+
+            // Title
+            StaticLayout tLayout = StaticLayout.Builder.obtain(featured.title, 0, featured.title.length(), lHeroTitle, Math.round(900 * k))
+                    .setMaxLines(2)
+                    .setEllipsize(TextUtils.TruncateAt.END)
+                    .setIncludePad(false)
+                    .build();
+            c.save();
+            c.translate(heroX - Ui.leftBearing(lHeroTitle, featured.title), titleY);
+            tLayout.draw(c);
+            c.restore();
+
+            float metaY = titleY + tLayout.getHeight() + 26 * k;
+            if (featured.meta != null && !featured.meta.isEmpty()) {
+                c.drawText(featured.meta, heroX, metaY, lHeroMeta);
+            }
+
+            // Description / Overview
+            String desc = featured.overview != null && !featured.overview.trim().isEmpty() ? featured.overview.trim() : "";
+            if (!desc.isEmpty()) {
+                StaticLayout dLayout = StaticLayout.Builder.obtain(desc, 0, desc.length(), lHeroDesc, Math.round(900 * k))
+                        .setMaxLines(3)
+                        .setEllipsize(TextUtils.TruncateAt.END)
+                        .setIncludePad(false)
+                        .build();
+                c.save();
+                c.translate(heroX, metaY + 16 * k);
+                dLayout.draw(c);
+                c.restore();
+            }
+
+            // Action buttons
+            drawHeroAction(c, 0, "play", "Play", cardRects[0], cardFocus[0].value);
+            drawHeroAction(c, 1, "details", "Details", cardRects[1], cardFocus[1].value);
+        }
+
+        // Featured Preview Cards on Right:
+        if (cards.size() > 1) drawFeaturedPreviewCard(c, 1, cardRects[2], cardFocus[2].value);
+        if (cards.size() > 2) drawFeaturedPreviewCard(c, 2, cardRects[3], cardFocus[3].value);
+
         if (HomeData.coinCount() > 0) drawQuotes(c);
+    }
+
+    private void drawHeroAction(Canvas c, int index, String icon, String label, RectF r, float focus) {
+        float f = Ui.clamp(focus);
+        float s = 1 + 0.05f * f;
+        float bw = r.width(), bh = r.height();
+        float cx = r.centerX(), cy = r.centerY();
+        cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
+        float rad = cell.height() / 2;
+
+        if (f > 0.01f) {
+            tmp.set(cell);
+            tmp.offset(0, 6 * k * f);
+            shadow.setColor(Ui.alpha(0xFF000000, 0.45f * f));
+            shadows.draw(c, tmp, rad, SHADOW_BLUR * k, shadow);
+        }
+
+        fill.setShader(null);
+        if (f > 0.01f) {
+            fill.setColor(blend(0x38FFFFFF, 0xFFFFFFFF, f));
+        } else {
+            fill.setColor(0x33FFFFFF);
+        }
+        c.drawRoundRect(cell, rad, rad, fill);
+
+        if (f < 0.99f) {
+            border.setColor(Ui.alpha(0x55FFFFFF, 1 - f));
+            border.setStrokeWidth(1.5f * k);
+            c.drawRoundRect(cell, rad, rad, border);
+        }
+
+        int textColor = blend(0xFFFFFFFF, 0xFF111113, f);
+        float iconSize = 24 * k * s;
+        float iconW = "play".equals(icon) ? Symbols.width(getContext(), "play", iconSize) : 0;
+        lHeroBtnText.setColor(textColor);
+        lHeroBtnText.setTextSize(21 * k * s);
+        float textW = lHeroBtnText.measureText(label);
+        float spacing = 10 * k;
+        float totalW = (iconW > 0 ? iconW + spacing : 0) + textW;
+        float startX = cell.centerX() - totalW / 2;
+
+        if ("play".equals(icon)) {
+            Symbols.draw(getContext(), c, "play", startX + iconW / 2, cell.centerY(), iconSize, textColor);
+            startX += iconW + spacing;
+        } else if ("details".equals(icon)) {
+            Symbols.draw(getContext(), c, "sparkles", startX + iconSize / 2, cell.centerY(), iconSize, textColor);
+            startX += iconSize + spacing;
+        }
+        c.drawText(label, startX, cell.centerY() + Ui.halfCap(lHeroBtnText), lHeroBtnText);
+    }
+
+    private void drawFeaturedPreviewCard(Canvas c, int pickIdx, RectF base, float focusVal) {
+        if (pickIdx >= cards.size()) return;
+        Recs.Pick p = cards.get(pickIdx);
+        float f = Ui.clamp(focusVal), s = 1 + 0.05f * focusVal;
+        float bw = base.width(), bh = base.height(), r0 = 18 * k;
+        float cx = base.centerX(), cy = base.centerY() - 6 * k * focusVal;
+        cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
+        float r = r0 * s;
+
+        c.save();
+        c.translate(cx, cy);
+        c.scale(s, s);
+        tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
+        tmp.offset(0, (10 + 14 * f) * k);
+        shadowDeep.setColor(Ui.alpha(0xFF000000, 0.28f + 0.32f * f));
+        shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
+        c.restore();
+
+        Backdrop b = recs.backdrop(p);
+        Bitmap img = b == null ? null : b.tall;
+        if (img != null) {
+            roundImage(c, img, b.tallShader, cell, r);
+        } else {
+            fill.setShader(null);
+            fill.setColor(0xFF2C2C2E);
+            c.drawRoundRect(cell, r, r, fill);
+        }
+
+        if (f > 0.01f) {
+            int alpha = Math.round(255 * f);
+            c.save();
+            c.translate(cx, cy);
+            c.scale(s, s);
+            tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
+            rim.setColor(0xE6FFFFFF);
+            rim.setAlpha(alpha);
+            rim.setStrokeWidth(2.5f * k / s);
+            c.drawRoundRect(tmp, r0, r0, rim);
+            rim.setStrokeWidth(2.5f * k);
+            rim.setAlpha(255);
+            c.restore();
+        }
+
+        fitPaint.set(lCardTitle);
+        fitPaint.setColor(0xFFFFFFFF);
+        c.drawText(TextUtils.ellipsize(p.title, fitPaint, bw, TextUtils.TruncateAt.END).toString(),
+                base.left, base.bottom + 36 * k, fitPaint);
     }
 
     private boolean picksOn() {
@@ -2950,73 +3132,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float sw = Symbols.width(getContext(), symbol, size);
         Symbols.draw(getContext(), c, symbol, x + sw / 2, base - Ui.halfCap(lWeather), size, lWeather.getColor());
         c.drawText(weatherLine, x + sw + 16 * k, base, lWeather);
-    }
-
-    /**
-     * Recommendation card: the title's photo (already at the focused card size, so it stays sharp), rounded corners and
-     * a soft shadow; when focused, it grows 5%, rises and lights up its border. Below it, the title (and on the large
-     * card, genre · runtime · service).
-     */
-    private void drawLightCard(Canvas c, int i) {
-        RectF base = cardRects[i];
-        Recs.Pick p = i < cards.size() ? cards.get(i) : null;
-        float v = cardFocus[i].value, f = Ui.clamp(v), s = 1 + 0.05f * v;
-        float bw = base.width(), bh = base.height(), r0 = 18 * k;
-        float cx = base.centerX(), cy = base.centerY() - 6 * k * v;
-        cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
-        float r = r0 * s;
-        c.save();
-        c.translate(cx, cy);
-        c.scale(s, s);
-        tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
-        tmp.offset(0, (10 + 14 * f) * k);
-        shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.14f, 0.32f) + tone(0.2f, 0.28f) * f));
-        shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
-        c.restore();
-        Backdrop b = p == null ? null : recs.backdrop(p);
-        Bitmap img = b == null ? null : (i == 0 ? b.wide : b.tall);
-        if (img != null) {
-            roundImage(c, img, i == 0 ? b.wideShader : b.tallShader, cell, r);
-        } else {
-            fill.setShader(null);
-            fill.setColor(tone(0xFFDADADF, 0xFF2C2C2E));
-            c.drawRoundRect(cell, r, r, fill);
-        }
-        if (f > 0.01f) {
-            if (lightSheens.length != cardRects.length) {
-                lightSheens = new LinearGradient[cardRects.length];
-                lightRims = new LinearGradient[cardRects.length];
-                lightShaderW = new float[cardRects.length];
-            }
-            if (lightSheens[i] == null || lightShaderW[i] != bw) {
-                lightSheens[i] = new LinearGradient(-bw / 2, -bh / 2, 0, bh / 2, 0x38FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
-                lightRims[i] = new LinearGradient(0, -bh / 2, 0, bh / 2, 0xE6FFFFFF, 0x59FFFFFF, Shader.TileMode.CLAMP);
-                lightShaderW[i] = bw;
-            }
-            int alpha = Math.round(255 * f);
-            c.save();
-            c.translate(cx, cy);
-            c.scale(s, s);
-            tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
-            sheen.setShader(lightSheens[i]);
-            sheen.setAlpha(alpha);
-            c.drawRoundRect(tmp, r0, r0, sheen);
-            sheen.setAlpha(255);
-            rim.setShader(lightRims[i]);
-            rim.setAlpha(alpha);
-            rim.setStrokeWidth(2.5f * k / s);
-            c.drawRoundRect(tmp, r0, r0, rim);
-            rim.setStrokeWidth(2.5f * k);
-            rim.setAlpha(255);
-            c.restore();
-        }
-        if (p == null) return;
-        fitPaint.set(lCardTitle);
-        c.drawText(TextUtils.ellipsize(p.title, fitPaint, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 46 * k, lCardTitle);
-        if (i == 0 && p.meta != null && !p.meta.isEmpty()) {
-            fitPaint.set(lCardMeta);
-            c.drawText(TextUtils.ellipsize(p.meta, fitPaint, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 80 * k, lCardMeta);
-        }
     }
 
     /**
@@ -3056,25 +3171,42 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private boolean moveLight(int dx, int dy) {
         switch (zone) {
             case Z_SHELF:
-                // Up from an empty shelf too: move()'s older zones (the hero, the corner capsule) aren't drawn any more.
                 if (dy >= 0) return false;
                 if (cards.isEmpty()) {
-                    if (!picksOn() && lightButtons.isEmpty()) return true;   // no tabs and no buttons above
+                    if (!picksOn() && lightButtons.isEmpty()) return true;
                     zone = Z_TOP;
                     topIndex = picksOn() ? tab : 3;
                 } else {
                     zone = Z_CARDS;
-                    cardIndex = nearest(cardRects, cards.size(), shelf.isEmpty() ? w / 2f : tileRects[shelfIndex].centerX());
+                    cardIndex = 0; // Focus on [Play] button
                 }
                 break;
             case Z_CARDS:
                 if (dx != 0) {
-                    int next = Math.max(0, Math.min(cards.size() - 1, cardIndex + dx));
-                    if (next == cardIndex) return true;
+                    int maxIdx = 1 + (cards.size() > 1 ? (cards.size() > 2 ? 2 : 1) : 0);
+                    int next = Math.max(0, Math.min(maxIdx, cardIndex + dx));
+                    if (next == cardIndex) {
+                        // Left on Play: cycle to previous show
+                        if (dx < 0 && cardIndex == 0 && cards.size() > 1) {
+                            featuredIndex = (featuredIndex - 1 + cards.size()) % cards.size();
+                            showBackdrop(recs.backdrop(cards.get(featuredIndex)));
+                            heroDirty = true;
+                        }
+                        return true;
+                    }
                     cardIndex = next;
+                    if (cardIndex == 2 && cards.size() > 1) {
+                        featuredIndex = 1;
+                        showBackdrop(recs.backdrop(cards.get(1)));
+                        heroDirty = true;
+                    } else if (cardIndex == 3 && cards.size() > 2) {
+                        featuredIndex = 2;
+                        showBackdrop(recs.backdrop(cards.get(2)));
+                        heroDirty = true;
+                    }
                 } else if (dy < 0) {
                     zone = Z_TOP;
-                    topIndex = tab;     // as on Apple TV: moving up to the tabs focuses the selected tab
+                    topIndex = tab;
                 } else {
                     zone = Z_SHELF;
                     if (!shelf.isEmpty()) shelfIndex = nearest(tileRects, tileRects.length, cardRects[cardIndex].centerX());
@@ -3085,16 +3217,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     int next = Math.max(picksOn() ? 0 : 3, Math.min(2 + lightButtons.size(), topIndex + dx));
                     if (next == topIndex) return true;
                     topIndex = next;
-                    if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it
+                    if (topIndex < 3) selectTab(topIndex);
                 } else if (dy > 0) {
                     if (cards.isEmpty()) {
                         zone = Z_SHELF;
                     } else {
                         zone = Z_CARDS;
-                        cardIndex = nearest(cardRects, cards.size(), topRects[topIndex].centerX());
+                        cardIndex = 0; // Focus on [Play] button
                     }
                 } else if (topIndex < 3 && !lightButtons.isEmpty()) {
-                    topIndex = 3;   // up from the tabs reaches the corner buttons without walking the row
+                    topIndex = 3;
                 } else {
                     return true;
                 }
