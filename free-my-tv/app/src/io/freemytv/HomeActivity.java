@@ -20,19 +20,7 @@ public class HomeActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Watchdog.install(this);
-        if (Watchdog.crashedTooOften(this)) {
-            // Don't try to draw again: only show a notice while the main process restores the original home screen.
-            HomeMode.requestRevertHome(this);
-            TextView t = new TextView(this);
-            t.setText(Ui.tr("Free My TV's home screen ran into a problem.\nGoing back to the TV's original home screen…"));
-            t.setTextColor(Color.WHITE);
-            t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
-            t.setGravity(Gravity.CENTER);
-            t.setBackgroundColor(Color.rgb(7, 11, 30));
-            setContentView(t);
-            return;
-        }
+        Watchdog.clear(this);
         Ui.init(this);
         home = new HomeView(this);
         setContentView(home);

@@ -74,7 +74,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final float SHELF_PAD = 40, TILE_GAP = 48;
     private static final float TILE_RADIUS = 22;
     // Tile focus (Apple TV style): it grows from the center and its shadow drops (it "rises" toward the viewer).
-    private static final float FOCUS_GROW = 0.05f;
+    private static final float FOCUS_GROW = 0.2f;
     // Corner capsule.
     // Corner capsule: the height and top offset of the tvOS tab bar (68 and 46).
     private static final float CAPSULE_TOP = 46, CAPSULE_H = 68, BUTTON = 56;
@@ -83,7 +83,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // "All Apps" sheet.
     private static final int COLUMNS = 5, VISIBLE_ROWS = 3;
     private static final float GRID_W = 300, GRID_H = 169, GRID_GAP = 40, GRID_ROW = 239, GRID_TOP = 196, GRID_RADIUS = 22;
-    private static final int SMOKE = 0xFF111113, INK = 0xFF1C1C1E, WHITE = 0xFFF5F6F8;
+    private static final int SMOKE = 0xFF111113, INK = 0xFF1C1C1E, WHITE = 0xFFF5F5F7;
     private static final int UP_COLOR = 0xFF30D158, DOWN_COLOR = 0xFFFF453A;
     private static final long TOAST_MS = 6000, FADE_MS = 350;
     /** Blur radii of the shadow and shadowDeep paints (Shadows needs them to draw the same blur on older TVs). */
@@ -637,13 +637,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lClock.setLetterSpacing(-0.01f);
         lWeather = Ui.text(Ui.medium, 34 * k, L_DIM);
         lClockQuote = Ui.numbers(Ui.medium, 28 * k, L_DIM);
-        lHeroTitle = new TextPaint(Ui.text(Ui.displaySemibold, 44 * k, 0xFFF5F6F8));
-        lHeroTitle.setShadowLayer(16 * k, 0, 3 * k, 0xCC090D14);
-        lHeroMeta = Ui.text(Ui.medium, 22 * k, 0xFFA7AFBD);
-        lHeroMeta.setShadowLayer(10 * k, 0, 2 * k, 0x99090D14);
-        lHeroDesc = new TextPaint(Ui.text(Ui.regular, 20 * k, 0xFFA7AFBD));
-        lHeroDesc.setShadowLayer(10 * k, 0, 2 * k, 0x99090D14);
-        lHeroBtnText = Ui.text(Ui.semibold, 20 * k, 0xFFF5F6F8);
+        lHeroTitle = new TextPaint(Ui.text(Ui.displaySemibold, 44 * k, 0xFFFFFFFF));
+        lHeroTitle.setShadowLayer(16 * k, 0, 3 * k, 0xCC000000);
+        lHeroMeta = Ui.text(Ui.medium, 23 * k, 0xD9FFFFFF);
+        lHeroMeta.setShadowLayer(10 * k, 0, 2 * k, 0x99000000);
+        lHeroDesc = new TextPaint(Ui.text(Ui.regular, 20 * k, 0xC7FFFFFF));
+        lHeroDesc.setShadowLayer(10 * k, 0, 2 * k, 0x99000000);
+        lHeroBtnText = Ui.text(Ui.semibold, 21 * k, 0xFFFFFFFF);
         lightGradient = null;
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
         capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
@@ -999,18 +999,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Text colors for the current night value (dark by day, white at night). */
     private void applyTone() {
+        if (lTitle == null) return;
         lTitle.setColor(tone(L_INK, WHITE));
-        lTab.setColor(tone(L_DIM, 0xFF8E8E93));
-        lTabOn.setColor(tone(L_INK, WHITE));
-        lCardTitle.setColor(tone(L_INK, WHITE));
-        lCardMeta.setColor(tone(L_DIM, 0xFF98989D));
-        lQuote.setColor(tone(L_FAINT, 0xB8FFFFFF));
-        lTip.setColor(tone(L_INK, WHITE));
-        lDate.setColor(tone(L_DIM, 0xFF98989D));
-        lClock.setColor(tone(L_INK, WHITE));
-        lWeather.setColor(tone(L_DIM, 0xFF98989D));
-        lClockQuote.setColor(tone(L_DIM, 0xFF98989D));
-        staleQuote.setColor(tone(L_FAINT, 0x99FFFFFF));
+        if (lTab != null) lTab.setColor(tone(L_DIM, 0xFF8E8E93));
+        if (lTabOn != null) lTabOn.setColor(tone(L_INK, WHITE));
+        if (lCardTitle != null) lCardTitle.setColor(tone(L_INK, WHITE));
+        if (lCardMeta != null) lCardMeta.setColor(tone(L_DIM, 0xFF98989D));
+        if (lQuote != null) lQuote.setColor(tone(L_FAINT, 0xB8FFFFFF));
+        if (lTip != null) lTip.setColor(tone(L_INK, WHITE));
+        if (lDate != null) lDate.setColor(tone(L_DIM, 0xFF98989D));
+        if (lClock != null) lClock.setColor(tone(L_INK, WHITE));
+        if (lWeather != null) lWeather.setColor(tone(L_DIM, 0xFF98989D));
+        if (lClockQuote != null) lClockQuote.setColor(tone(L_DIM, 0xFF98989D));
+        if (staleQuote != null) staleQuote.setColor(tone(L_FAINT, 0x99FFFFFF));
     }
 
     private boolean tickBackgroundFade(long up) {
@@ -1416,11 +1417,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 tileFill.setAlpha(Math.round(255 * fc));
                 c.drawRoundRect(tmp, r0, r0, tileFill);
                 tileFill.setAlpha(255);
-                rim.setColor(0xFFE5E9F0);
-                rim.setAlpha(Math.round(210 * fc));
-                rim.setStrokeWidth(2.5f * k / s);
-                c.drawRoundRect(tmp, r0, r0, rim);
-                rim.setAlpha(255);
             }
             tileFill.setShader(null);
             c.restore();
@@ -1429,23 +1425,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tileFill.setShader(null);
             tileFill.setColor(0xFF161618);
             c.drawRoundRect(cell, r, r, tileFill);
-            if (fc > 0.01f) {
-                rim.setColor(0xFFE5E9F0);
-                rim.setAlpha(Math.round(210 * fc));
-                rim.setStrokeWidth(2.5f * k);
-                c.drawRoundRect(cell, r, r, rim);
-                rim.setAlpha(255);
-            }
             drawLogo(c, it, cell, s, 0);
         } else {
             if (it.tile != null) roundImage(c, it.tile, it.tileShader, cell, r);
-            if (fc > 0.01f) {
-                rim.setColor(0xFFE5E9F0);
-                rim.setAlpha(Math.round(210 * fc));
-                rim.setStrokeWidth(2.5f * k);
-                c.drawRoundRect(cell, r, r, rim);
-                rim.setAlpha(255);
-            }
         }
     }
 
@@ -3125,14 +3107,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
 
         fitPaint.set(lCardTitle);
-        fitPaint.setColor(0xFFF5F6F8);
+        fitPaint.setColor(0xFFFFFFFF);
         fitPaint.setTextSize(22 * k);
         c.drawText(TextUtils.ellipsize(p.title, fitPaint, bw, TextUtils.TruncateAt.END).toString(),
                 base.left, base.bottom + 26 * k, fitPaint);
         if (p.meta != null && !p.meta.isEmpty()) {
             fitPaint.set(lHeroMeta);
             fitPaint.setTextSize(17 * k);
-            fitPaint.setColor(0xFFA7AFBD);
+            fitPaint.setColor(0xD9FFFFFF);
             c.drawText(TextUtils.ellipsize(p.meta, fitPaint, bw, TextUtils.TruncateAt.END).toString(),
                     base.left, base.bottom + 48 * k, fitPaint);
         }
