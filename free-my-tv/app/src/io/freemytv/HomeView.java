@@ -101,10 +101,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final float L_DATE_BASE = 330, L_CLOCK_BASE = 540, L_WEATHER_BASE = 626, L_QUOTES_BASE = 694;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
     private static final int TAB_COUNT = 5;
-    private static final int TAB_EXPLORE = 0, TAB_MOVIES = 1, TAB_SHOWS = 2, TAB_FAVOURITES = 3, TAB_MOODS = 4;
+    private static final int TAB_HOME = 0, TAB_MOVIES = 1, TAB_SHOWS = 2, TAB_FAVOURITES = 3, TAB_EXPLORE = 4;
     private static String[] tabs;
     private static int tabsGeneration = -1;
-    private static final String[] TAB_KIND = {null, "movie", "tv", "favourites", "moods"};
+    private static final String[] TAB_KIND = {null, "movie", "tv", "favourites", "explore"};
     private static final int Z_TOP = 4, Z_CARDS = 5, Z_MOODS = 6;
 
     private final Activity activity;
@@ -461,6 +461,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (!again) reload();
         updatePalette();
         updatePicks();
+        handler.removeCallbacks(heroAutoScroll);
+        handler.postDelayed(heroAutoScroll, HERO_AUTO_SCROLL_DELAY_MS);
         if (sheetOpen) closeSheet();
         sheet.snap(sheet.target);
         motionDirty = true;
@@ -473,6 +475,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void pause() {
         if (!running) return;
         running = false;
+        handler.removeCallbacks(heroAutoScroll);
         cancelReorder(true);
         handler.removeCallbacks(holdStart);
         okHeld = holdArmed = false;
@@ -532,11 +535,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static String[] tabs() {
         if (tabsGeneration != Ui.generation) {
             tabs = new String[] {
-                Ui.tr("Explore"),
+                Ui.tr("Home"),
                 Ui.tr("Movies"),
                 Ui.tr("Shows"),
                 Ui.tr("My Favourites"),
-                Ui.tr("Don't have time to browse?")
+                Ui.tr("Explore")
             };
             tabsGeneration = Ui.generation;
         }
@@ -723,7 +726,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean bgFading = tickBackgroundFade(up);
         boolean nightMoving = tickNight(up);
         boolean moodMoving = false;
-        if (tab == TAB_MOODS) {
+        if (tab == TAB_EXPLORE) {
             moodMoving = moodDeck.updateAnimations();
             if (moodMoving) {
                 heroLayer.invalidate();
@@ -786,7 +789,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float lift = -d * shift;
         show(heroLayer, top, lift);
         show(status, top, lift);
-        if (tab == TAB_MOODS && zone != Z_SHELF) {
+        if (tab == TAB_EXPLORE && zone != Z_SHELF) {
             float moodShelfDrop = 250 * k;
             platter.setTranslationY(lift + moodShelfDrop);
             tiles.setTranslationY(lift + moodShelfDrop);
@@ -2100,6 +2103,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     boolean onKey(KeyEvent e) {
         wake();
+        resetHeroAutoScroll();
         boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
         if (reordering) return reorderKey(e, down);
         int code = e.getKeyCode();
@@ -2162,7 +2166,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void back() {
         if (sheetOpen) {
             closeSheet();
-        } else if (tab == TAB_MOODS && moodDeck.getState() != MoodDeck.STATE_DECK) {
+        } else if (tab == TAB_EXPLORE && moodDeck.getState() != MoodDeck.STATE_DECK) {
             moodDeck.resetToDeck();
             heroDirty = true;
             sky.invalidate();
@@ -2170,9 +2174,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         } else if (zone == Z_DRAWER || zone == WIDGETS) {
             closeDrawer();
             retarget(false);
-        } else if (tab == TAB_MOODS && zone == Z_MOODS) {
+        } else if (tab == TAB_EXPLORE && zone == Z_MOODS) {
             zone = Z_TOP;
-            topIndex = TAB_MOODS;
+            topIndex = TAB_EXPLORE;
             retarget(false);
         } else if (zone != Z_SHELF) {
             zone = Z_SHELF;
@@ -2891,11 +2895,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float btnY = 590 * k, btnW1 = 165 * k, btnW2 = 145 * k, btnH = 48 * k, btnGap = 16 * k;
         cardRects[0].set(MARGIN * k, btnY, MARGIN * k + btnW1, btnY + btnH);
         cardRects[1].set(cardRects[0].right + btnGap, btnY, cardRects[0].right + btnGap + btnW2, btnY + btnH);
-
-        // Featured 16:9 preview cards on the right
-        float cardTop = 450 * k, cardW = 340 * k, cardH = 191 * k, cardGap = 24 * k;
-        cardRects[3].set(CONTENT_R * k - cardW, cardTop, CONTENT_R * k, cardTop + cardH);
-        cardRects[2].set(cardRects[3].left - cardGap - cardW, cardTop, cardRects[3].left - cardGap, cardTop + cardH);
+        cardRects[2].setEmpty();
+        cardRects[3].setEmpty();
 
         for (RectF r : cardRects) snap(r);
         for (HomeApps.Item it : lightButtons) {
@@ -2908,6 +2909,43 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Symbols.warm(getContext(), "sparkles", 24 * k * 1.05f);
         Symbols.warmWeather(getContext(), 40 * k);
         heroDirty = statusDirty = true;
+    }
+
+    private static final long HERO_AUTO_SCROLL_DELAY_MS = 6000;
+    private final Runnable heroAutoScroll = new Runnable() {
+        @Override public void run() {
+            if (tab != TAB_EXPLORE && hasWindowFocus() && !drawerOpen && !sheetOpen) {
+                int count = Math.min(3, cards.size());
+                if (count > 1) {
+                    featuredIndex = (featuredIndex + 1) % count;
+                    updateHeroBackdrop();
+                }
+            }
+            handler.postDelayed(this, HERO_AUTO_SCROLL_DELAY_MS);
+        }
+    };
+
+    private void resetHeroAutoScroll() {
+        handler.removeCallbacks(heroAutoScroll);
+        handler.postDelayed(heroAutoScroll, HERO_AUTO_SCROLL_DELAY_MS);
+    }
+
+    private void cycleHero(int delta) {
+        int count = Math.min(3, cards.size());
+        if (count <= 1) return;
+        featuredIndex = (featuredIndex + delta + count) % count;
+        updateHeroBackdrop();
+        resetHeroAutoScroll();
+    }
+
+    private void updateHeroBackdrop() {
+        if (cards.isEmpty()) return;
+        Recs.Pick p = cards.get(Math.min(featuredIndex, cards.size() - 1));
+        Backdrop b = tab == TAB_FAVOURITES ? getFavBackdrop(p) : recs.backdrop(p);
+        if (b != null) showBackdrop(b);
+        heroDirty = true;
+        sky.invalidate();
+        heroLayer.invalidate();
     }
 
     private List<Recs.Pick> getFavouritesList() {
@@ -2968,7 +3006,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         List<Recs.Pick> list;
         if (tab == TAB_FAVOURITES) {
             list = getFavouritesList();
-        } else if (tab == TAB_MOODS) {
+        } else if (tab == TAB_EXPLORE) {
             list = Collections.emptyList();
         } else {
             list = recs.now(TAB_KIND[tab]);
@@ -2986,7 +3024,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (!cards.isEmpty()) {
                 showBackdrop(getFavBackdrop(cards.get(Math.min(featuredIndex, cards.size() - 1))));
             }
-        } else if (tab == TAB_MOODS) {
+        } else if (tab == TAB_EXPLORE) {
             moodDeck.resetToDeck();
             showBackdrop(null);
         } else {
@@ -3018,7 +3056,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void drawLightSky(Canvas c) {
-        if (tab == TAB_MOODS) {
+        if (tab == TAB_EXPLORE) {
             moodDeck.drawBackground(c, w, h);
             if (moodDeck.isAnimating()) {
                 sky.postInvalidateOnAnimation();
@@ -3062,7 +3100,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             return;
         }
 
-        if (tab == TAB_MOODS) {
+        if (tab == TAB_EXPLORE) {
             moodDeck.drawForeground(c, w, h, k);
             if (moodDeck.isAnimating()) {
                 heroLayer.postInvalidateOnAnimation();
@@ -3160,11 +3198,24 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             // Action buttons
             drawHeroAction(c, 0, "play", "Watch Now", cardRects[0], cardFocus[0].value);
             drawHeroAction(c, 1, "plus", "My List", cardRects[1], cardFocus[1].value);
-        }
 
-        // Featured 16:9 Preview Cards on Right:
-        if (cards.size() > 1) drawFeaturedPreviewCard(c, 1, cardRects[2], cardFocus[2].value);
-        if (cards.size() > 2) drawFeaturedPreviewCard(c, 2, cardRects[3], cardFocus[3].value);
+            // 3 Carousel indicator pills
+            int carouselCount = Math.min(3, cards.size());
+            if (carouselCount > 1) {
+                float dotY = cardRects[1].centerY();
+                float dotX = cardRects[1].right + 36 * k;
+                for (int ci = 0; ci < carouselCount; ci++) {
+                    boolean isActive = (ci == featuredIndex);
+                    float dw = isActive ? 26 * k : 8 * k;
+                    float dh = 6 * k;
+                    fill.setShader(null);
+                    fill.setColor(isActive ? 0xFFFFFFFF : 0x55FFFFFF);
+                    RectF dotRect = new RectF(dotX, dotY - dh / 2, dotX + dw, dotY + dh / 2);
+                    c.drawRoundRect(dotRect, dh / 2, dh / 2, fill);
+                    dotX += dw + 8 * k;
+                }
+            }
+        }
 
         if (HomeData.coinCount() > 0) drawQuotes(c);
     }
@@ -3344,7 +3395,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         switch (zone) {
             case Z_SHELF:
                 if (dy >= 0) return false;
-                if (tab == TAB_MOODS) {
+                if (tab == TAB_EXPLORE) {
                     zone = Z_MOODS;
                 } else if (cards.isEmpty()) {
                     if (!picksOn() && lightButtons.isEmpty()) return true;
@@ -3358,7 +3409,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case Z_MOODS:
                 if (dy < 0) {
                     zone = Z_TOP;
-                    topIndex = TAB_MOODS;
+                    topIndex = TAB_EXPLORE;
                 } else if (dy > 0) {
                     zone = Z_SHELF;
                 } else if (dx < 0) {
@@ -3391,30 +3442,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case Z_CARDS:
                 if (dx != 0) {
-                    int maxIdx = 1 + (cards.size() > 1 ? (cards.size() > 2 ? 2 : 1) : 0);
-                    int next = Math.max(0, Math.min(maxIdx, cardIndex + dx));
-                    if (next == cardIndex) {
-                        // Left on Play: cycle to previous show
-                        if (dx < 0 && cardIndex == 0 && cards.size() > 1) {
-                            featuredIndex = (featuredIndex - 1 + cards.size()) % cards.size();
-                            Backdrop b = tab == TAB_FAVOURITES ? getFavBackdrop(cards.get(featuredIndex)) : recs.backdrop(cards.get(featuredIndex));
-                            showBackdrop(b);
-                            heroDirty = true;
+                    if (dx > 0) {
+                        if (cardIndex == 0) {
+                            cardIndex = 1;
+                        } else {
+                            cycleHero(1);
                         }
-                        return true;
+                    } else { // dx < 0
+                        if (cardIndex == 1) {
+                            cardIndex = 0;
+                        } else {
+                            cycleHero(-1);
+                        }
                     }
-                    cardIndex = next;
-                    if (cardIndex == 2 && cards.size() > 1) {
-                        featuredIndex = 1;
-                        Backdrop b = tab == TAB_FAVOURITES ? getFavBackdrop(cards.get(1)) : recs.backdrop(cards.get(1));
-                        showBackdrop(b);
-                        heroDirty = true;
-                    } else if (cardIndex == 3 && cards.size() > 2) {
-                        featuredIndex = 2;
-                        Backdrop b = tab == TAB_FAVOURITES ? getFavBackdrop(cards.get(2)) : recs.backdrop(cards.get(2));
-                        showBackdrop(b);
-                        heroDirty = true;
-                    }
+                    return true;
                 } else if (dy < 0) {
                     zone = Z_TOP;
                     topIndex = tab;
@@ -3430,7 +3471,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     topIndex = next;
                     if (topIndex < TAB_COUNT) selectTab(topIndex);
                 } else if (dy > 0) {
-                    if (tab == TAB_MOODS) {
+                    if (tab == TAB_EXPLORE) {
                         zone = Z_MOODS;
                     } else if (cards.isEmpty()) {
                         zone = Z_SHELF;

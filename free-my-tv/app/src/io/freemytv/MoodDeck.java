@@ -445,13 +445,13 @@ final class MoodDeck {
     void drawForeground(Canvas c, int w, int h, float k) {
         if (moods.isEmpty()) return;
 
-        // Draw Top Section Header: "Don't have time to browse?"
-        String header = "Don't have time to browse?";
-        TextPaint headerPaint = Ui.displayMedium != null ? new TextPaint(Ui.text(Ui.displayMedium, 36 * k, 0xFFFFFFFF))
-                : new TextPaint(Ui.text(Ui.semibold, 36 * k, 0xFFFFFFFF));
+        // Draw Top Section Header: "Explore"
+        String header = "Explore";
+        TextPaint headerPaint = Ui.displayMedium != null ? new TextPaint(Ui.text(Ui.displayMedium, 38 * k, 0xFFFFFFFF))
+                : new TextPaint(Ui.text(Ui.semibold, 38 * k, 0xFFFFFFFF));
         headerPaint.setTextAlign(Paint.Align.CENTER);
         headerPaint.setShadowLayer(16 * k, 0, 3 * k, 0xDD000000);
-        c.drawText(header, w / 2f, 130 * k, headerPaint);
+        c.drawText(header, w / 2f, 185 * k, headerPaint);
 
         Mood mood = moods.get(currentMoodIndex);
 
@@ -493,7 +493,7 @@ final class MoodDeck {
 
     private void drawDeck(Canvas c, int w, int h, float k, Mood mood) {
         float cx = w / 2f;
-        float cy = 490 * k;
+        float cy = 560 * k;
 
         // Draw soft mood glow behind the deck
         RadialGradient glow = new RadialGradient(cx, cy, 340 * k,
@@ -505,11 +505,11 @@ final class MoodDeck {
 
         // 3rd card peeking behind
         int idx3 = (currentMoodIndex + 2) % moods.size();
-        drawDeckCard(c, cx, cy - 42 * k, 0.88f, 0f, 0.40f, moods.get(idx3), k);
+        drawDeckCard(c, cx, cy - 36 * k, 0.88f, 0f, 0.40f, moods.get(idx3), k);
 
         // 2nd card peeking behind
         int idx2 = (currentMoodIndex + 1) % moods.size();
-        drawDeckCard(c, cx, cy - 22 * k, 0.94f, 0f, 0.65f, moods.get(idx2), k);
+        drawDeckCard(c, cx, cy - 18 * k, 0.94f, 0f, 0.65f, moods.get(idx2), k);
 
         // Top card (with swipe animation if active)
         if (isSwiping) {
@@ -615,7 +615,7 @@ final class MoodDeck {
 
     private void drawReel(Canvas c, int w, int h, float k, Mood mood) {
         float cx = w / 2f;
-        float cy = 440 * k;
+        float cy = 480 * k;
         float cardW = 180 * k;
         float cardH = 270 * k;
         float cardGap = 24 * k;
