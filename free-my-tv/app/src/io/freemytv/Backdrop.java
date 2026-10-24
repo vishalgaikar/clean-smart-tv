@@ -107,21 +107,21 @@ final class Backdrop {
                 out.recycle();
                 return new Backdrop(null, frost, null, wide, tall, light, lightGlass, night, nightGlass, lightBg, nightBg, GW, GH);
             }
-            // Apply soft cinematic gradients across the backdrop:
+            // Apply soft cinematic gradients across the backdrop in dark platinum (#090D14):
             Paint scrim = new Paint(Paint.DITHER_FLAG);
             // Left gradient: dark on left for title/desc/actions, fading to transparent on right:
             scrim.setShader(new LinearGradient(0, 0, W * 0.72f, 0,
-                    new int[] {black(0.88f), black(0.72f), black(0.38f), black(0.10f), 0},
+                    new int[] {darkPlatinum(0.92f), darkPlatinum(0.76f), darkPlatinum(0.40f), darkPlatinum(0.12f), darkPlatinum(0)},
                     new float[] {0, 0.28f, 0.58f, 0.82f, 1f}, Shader.TileMode.CLAMP));
             c.drawRect(0, 0, W, H, scrim);
             // Bottom gradient: behind the app shelf / dock:
             scrim.setShader(new LinearGradient(0, H, 0, H * 0.45f,
-                    new int[] {black(0.92f), black(0.68f), black(0.25f), 0},
+                    new int[] {darkPlatinum(0.95f), darkPlatinum(0.72f), darkPlatinum(0.28f), darkPlatinum(0)},
                     new float[] {0, 0.35f, 0.72f, 1f}, Shader.TileMode.CLAMP));
             c.drawRect(0, H * 0.45f, W, H, scrim);
             // Top gradient: for greeting and tabs:
             scrim.setShader(new LinearGradient(0, 0, 0, H * 0.26f,
-                    new int[] {black(0.55f), black(0.20f), 0},
+                    new int[] {darkPlatinum(0.60f), darkPlatinum(0.22f), darkPlatinum(0)},
                     new float[] {0, 0.60f, 1f}, Shader.TileMode.CLAMP));
             c.drawRect(0, 0, W, H * 0.26f, scrim);
 
@@ -322,5 +322,9 @@ final class Backdrop {
 
     private static int black(float a) {
         return Math.round(Math.max(0, Math.min(1, a)) * 255) << 24;
+    }
+
+    private static int darkPlatinum(float a) {
+        return (Math.round(Math.max(0, Math.min(1, a)) * 255) << 24) | 0x00090D14;
     }
 }

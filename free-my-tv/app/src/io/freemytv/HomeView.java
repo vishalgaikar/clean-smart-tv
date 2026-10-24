@@ -74,7 +74,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final float SHELF_PAD = 40, TILE_GAP = 48;
     private static final float TILE_RADIUS = 22;
     // Tile focus (Apple TV style): it grows from the center and its shadow drops (it "rises" toward the viewer).
-    private static final float FOCUS_GROW = 0.2f;
+    private static final float FOCUS_GROW = 0.05f;
     // Corner capsule.
     // Corner capsule: the height and top offset of the tvOS tab bar (68 and 46).
     private static final float CAPSULE_TOP = 46, CAPSULE_H = 68, BUTTON = 56;
@@ -83,9 +83,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // "All Apps" sheet.
     private static final int COLUMNS = 5, VISIBLE_ROWS = 3;
     private static final float GRID_W = 300, GRID_H = 169, GRID_GAP = 40, GRID_ROW = 239, GRID_TOP = 196, GRID_RADIUS = 22;
-    private static final int SMOKE = 0xFF111113, INK = 0xFF1C1C1E, WHITE = 0xFFF5F5F7;
+    private static final int SMOKE = 0xFF111113, INK = 0xFF1C1C1E, WHITE = 0xFFF5F6F8;
     private static final int UP_COLOR = 0xFF30D158, DOWN_COLOR = 0xFFFF453A;
-    private static final long TOAST_MS = 6000, FADE_MS = 800;
+    private static final long TOAST_MS = 6000, FADE_MS = 350;
     /** Blur radii of the shadow and shadowDeep paints (Shadows needs them to draw the same blur on older TVs). */
     private static final float SHADOW_BLUR = 26, DEEP_BLUR = 30;
     private static final int SKY = 0, HERO = 1, STATUS = 2, PLATTER = 3, TILES = 4, DRAWER = 5, SHEET = 6, TOAST = 7;
@@ -637,13 +637,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lClock.setLetterSpacing(-0.01f);
         lWeather = Ui.text(Ui.medium, 34 * k, L_DIM);
         lClockQuote = Ui.numbers(Ui.medium, 28 * k, L_DIM);
-        lHeroTitle = new TextPaint(Ui.text(Ui.displaySemibold, 44 * k, 0xFFFFFFFF));
-        lHeroTitle.setShadowLayer(16 * k, 0, 3 * k, 0xCC000000);
-        lHeroMeta = Ui.text(Ui.medium, 23 * k, 0xD9FFFFFF);
-        lHeroMeta.setShadowLayer(10 * k, 0, 2 * k, 0x99000000);
-        lHeroDesc = new TextPaint(Ui.text(Ui.regular, 20 * k, 0xC7FFFFFF));
-        lHeroDesc.setShadowLayer(10 * k, 0, 2 * k, 0x99000000);
-        lHeroBtnText = Ui.text(Ui.semibold, 21 * k, 0xFFFFFFFF);
+        lHeroTitle = new TextPaint(Ui.text(Ui.displaySemibold, 44 * k, 0xFFF5F6F8));
+        lHeroTitle.setShadowLayer(16 * k, 0, 3 * k, 0xCC090D14);
+        lHeroMeta = Ui.text(Ui.medium, 22 * k, 0xFFA7AFBD);
+        lHeroMeta.setShadowLayer(10 * k, 0, 2 * k, 0x99090D14);
+        lHeroDesc = new TextPaint(Ui.text(Ui.regular, 20 * k, 0xFFA7AFBD));
+        lHeroDesc.setShadowLayer(10 * k, 0, 2 * k, 0x99090D14);
+        lHeroBtnText = Ui.text(Ui.semibold, 20 * k, 0xFFF5F6F8);
         lightGradient = null;
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
         capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
@@ -1416,6 +1416,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 tileFill.setAlpha(Math.round(255 * fc));
                 c.drawRoundRect(tmp, r0, r0, tileFill);
                 tileFill.setAlpha(255);
+                rim.setColor(0xFFE5E9F0);
+                rim.setAlpha(Math.round(210 * fc));
+                rim.setStrokeWidth(2.5f * k / s);
+                c.drawRoundRect(tmp, r0, r0, rim);
+                rim.setAlpha(255);
             }
             tileFill.setShader(null);
             c.restore();
@@ -1424,9 +1429,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tileFill.setShader(null);
             tileFill.setColor(0xFF161618);
             c.drawRoundRect(cell, r, r, tileFill);
+            if (fc > 0.01f) {
+                rim.setColor(0xFFE5E9F0);
+                rim.setAlpha(Math.round(210 * fc));
+                rim.setStrokeWidth(2.5f * k);
+                c.drawRoundRect(cell, r, r, rim);
+                rim.setAlpha(255);
+            }
             drawLogo(c, it, cell, s, 0);
         } else {
             if (it.tile != null) roundImage(c, it.tile, it.tileShader, cell, r);
+            if (fc > 0.01f) {
+                rim.setColor(0xFFE5E9F0);
+                rim.setAlpha(Math.round(210 * fc));
+                rim.setStrokeWidth(2.5f * k);
+                c.drawRoundRect(cell, r, r, rim);
+                rim.setAlpha(255);
+            }
         }
     }
 
@@ -2311,9 +2330,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 r = cardRects[0];
             } else if (cardIndex == 1) {
                 if (featured != null) {
-                    String overview = featured.overview != null && !featured.overview.trim().isEmpty() ? featured.overview.trim() : "No synopsis available.";
-                    String details = featured.title + (featured.meta != null && !featured.meta.isEmpty() ? " · " + featured.meta : "") + "\n\n" + overview;
-                    showToast(details);
+                    showToast("Added to My List: " + featured.title);
                 }
                 return;
             } else if (cardIndex == 2 && cards.size() > 1) {
@@ -2840,12 +2857,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
 
         // Action buttons on the left
-        float btnY = 590 * k, btnW = 150 * k, btnH = 48 * k, btnGap = 16 * k;
-        cardRects[0].set(MARGIN * k, btnY, MARGIN * k + btnW, btnY + btnH);
-        cardRects[1].set(cardRects[0].right + btnGap, btnY, cardRects[0].right + btnGap + btnW, btnY + btnH);
+        float btnY = 590 * k, btnW1 = 165 * k, btnW2 = 145 * k, btnH = 48 * k, btnGap = 16 * k;
+        cardRects[0].set(MARGIN * k, btnY, MARGIN * k + btnW1, btnY + btnH);
+        cardRects[1].set(cardRects[0].right + btnGap, btnY, cardRects[0].right + btnGap + btnW2, btnY + btnH);
 
-        // Featured preview cards on the right
-        float cardTop = 260 * k, cardH = 410 * k, cardW = 290 * k, cardGap = 24 * k;
+        // Featured 16:9 preview cards on the right
+        float cardTop = 450 * k, cardW = 340 * k, cardH = 191 * k, cardGap = 24 * k;
         cardRects[3].set(CONTENT_R * k - cardW, cardTop, CONTENT_R * k, cardTop + cardH);
         cardRects[2].set(cardRects[3].left - cardGap - cardW, cardTop, cardRects[3].left - cardGap, cardTop + cardH);
 
@@ -2999,11 +3016,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
 
             // Action buttons
-            drawHeroAction(c, 0, "play", "Play", cardRects[0], cardFocus[0].value);
-            drawHeroAction(c, 1, "details", "Details", cardRects[1], cardFocus[1].value);
+            drawHeroAction(c, 0, "play", "Watch Now", cardRects[0], cardFocus[0].value);
+            drawHeroAction(c, 1, "plus", "My List", cardRects[1], cardFocus[1].value);
         }
 
-        // Featured Preview Cards on Right:
+        // Featured 16:9 Preview Cards on Right:
         if (cards.size() > 1) drawFeaturedPreviewCard(c, 1, cardRects[2], cardFocus[2].value);
         if (cards.size() > 2) drawFeaturedPreviewCard(c, 2, cardRects[3], cardFocus[3].value);
 
@@ -3027,23 +3044,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
         fill.setShader(null);
         if (f > 0.01f) {
-            fill.setColor(blend(0x38FFFFFF, 0xFFFFFFFF, f));
+            fill.setColor(blend(0x28151B25, 0xFFE5E9F0, f));
         } else {
-            fill.setColor(0x33FFFFFF);
+            fill.setColor(0x4D151B25);
         }
         c.drawRoundRect(cell, rad, rad, fill);
 
         if (f < 0.99f) {
-            border.setColor(Ui.alpha(0x55FFFFFF, 1 - f));
-            border.setStrokeWidth(1.5f * k);
+            border.setColor(Ui.alpha(0x40A7AFBD, 1 - f));
+            border.setStrokeWidth(1.2f * k);
             c.drawRoundRect(cell, rad, rad, border);
         }
 
-        int textColor = blend(0xFFFFFFFF, 0xFF111113, f);
-        float iconSize = 24 * k * s;
-        float iconW = "play".equals(icon) ? Symbols.width(getContext(), "play", iconSize) : 0;
+        int textColor = blend(0xFFF5F6F8, 0xFF090D14, f);
+        float iconSize = 22 * k * s;
+        float iconW = "play".equals(icon) ? Symbols.width(getContext(), "play", iconSize) : ("plus".equals(icon) ? 14 * k * s : 0);
         lHeroBtnText.setColor(textColor);
-        lHeroBtnText.setTextSize(21 * k * s);
+        lHeroBtnText.setTextSize(20 * k * s);
         float textW = lHeroBtnText.measureText(label);
         float spacing = 10 * k;
         float totalW = (iconW > 0 ? iconW + spacing : 0) + textW;
@@ -3052,9 +3069,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if ("play".equals(icon)) {
             Symbols.draw(getContext(), c, "play", startX + iconW / 2, cell.centerY(), iconSize, textColor);
             startX += iconW + spacing;
-        } else if ("details".equals(icon)) {
-            Symbols.draw(getContext(), c, "sparkles", startX + iconSize / 2, cell.centerY(), iconSize, textColor);
-            startX += iconSize + spacing;
+        } else if ("plus".equals(icon)) {
+            float arm = 5.5f * k * s;
+            border.setColor(textColor);
+            border.setStrokeWidth(2.2f * k * s);
+            c.drawLine(startX + arm, cell.centerY() - arm, startX + arm, cell.centerY() + arm, border);
+            c.drawLine(startX, cell.centerY(), startX + 2 * arm, cell.centerY(), border);
+            startX += 2 * arm + spacing;
         }
         c.drawText(label, startX, cell.centerY() + Ui.halfCap(lHeroBtnText), lHeroBtnText);
     }
@@ -3063,7 +3084,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (pickIdx >= cards.size()) return;
         Recs.Pick p = cards.get(pickIdx);
         float f = Ui.clamp(focusVal), s = 1 + 0.05f * focusVal;
-        float bw = base.width(), bh = base.height(), r0 = 18 * k;
+        float bw = base.width(), bh = base.height(), r0 = 16 * k;
         float cx = base.centerX(), cy = base.centerY() - 6 * k * focusVal;
         cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
         float r = r0 * s;
@@ -3078,22 +3099,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         c.restore();
 
         Backdrop b = recs.backdrop(p);
-        Bitmap img = b == null ? null : b.tall;
+        Bitmap img = b == null ? null : (b.wide != null ? b.wide : b.tall);
+        BitmapShader shader = b == null ? null : (b.wideShader != null ? b.wideShader : b.tallShader);
         if (img != null) {
-            roundImage(c, img, b.tallShader, cell, r);
+            roundImage(c, img, shader, cell, r);
         } else {
             fill.setShader(null);
-            fill.setColor(0xFF2C2C2E);
+            fill.setColor(0xFF151B25);
             c.drawRoundRect(cell, r, r, fill);
         }
 
         if (f > 0.01f) {
-            int alpha = Math.round(255 * f);
+            int alpha = Math.round(230 * f);
             c.save();
             c.translate(cx, cy);
             c.scale(s, s);
             tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
-            rim.setColor(0xE6FFFFFF);
+            rim.setColor(0xFFE5E9F0);
             rim.setAlpha(alpha);
             rim.setStrokeWidth(2.5f * k / s);
             c.drawRoundRect(tmp, r0, r0, rim);
@@ -3103,9 +3125,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
 
         fitPaint.set(lCardTitle);
-        fitPaint.setColor(0xFFFFFFFF);
+        fitPaint.setColor(0xFFF5F6F8);
+        fitPaint.setTextSize(22 * k);
         c.drawText(TextUtils.ellipsize(p.title, fitPaint, bw, TextUtils.TruncateAt.END).toString(),
-                base.left, base.bottom + 36 * k, fitPaint);
+                base.left, base.bottom + 26 * k, fitPaint);
+        if (p.meta != null && !p.meta.isEmpty()) {
+            fitPaint.set(lHeroMeta);
+            fitPaint.setTextSize(17 * k);
+            fitPaint.setColor(0xFFA7AFBD);
+            c.drawText(TextUtils.ellipsize(p.meta, fitPaint, bw, TextUtils.TruncateAt.END).toString(),
+                    base.left, base.bottom + 48 * k, fitPaint);
+        }
     }
 
     private boolean picksOn() {

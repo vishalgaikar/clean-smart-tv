@@ -61,7 +61,7 @@ final class Recs {
     private static final int ANIMATION = 16;
     private static final long LIST_EVERY = 6 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
-    private static final int CACHE_VERSION = 9;
+    private static final int CACHE_VERSION = 10;
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     /** Service name on TMDB (part of the name, lowercase) → TV app (HomeApps key, package). */
     private static final String[][] SERVICES = {
@@ -499,6 +499,12 @@ final class Recs {
         p.title = o.optString(kind.equals("movie") ? "title" : "name");
         p.backdrop = backdrop;
         p.overview = o.optString("overview", "");
+        double vote = o.optDouble("vote_average", 0);
+        String date = o.optString(kind.equals("movie") ? "release_date" : "first_air_date", "");
+        List<String> parts = new ArrayList<>();
+        if (vote > 0) parts.add(String.format(Locale.US, "★ %.1f", vote));
+        if (date.length() >= 4) parts.add(date.substring(0, 4));
+        if (!parts.isEmpty()) p.meta = String.join(" · ", parts);
         list.add(p);
     }
 
@@ -518,6 +524,10 @@ final class Recs {
         String desc = o.optString("overview", "");
         if (!desc.isEmpty()) p.overview = desc;
         List<String> parts = new ArrayList<>();
+        double vote = o.optDouble("vote_average", 0);
+        if (vote > 0) parts.add(String.format(Locale.US, "★ %.1f", vote));
+        String date = o.optString(p.kind.equals("movie") ? "release_date" : "first_air_date", "");
+        if (date.length() >= 4) parts.add(date.substring(0, 4));
         JSONArray genres = o.optJSONArray("genres");
         if (p.kind.equals("tv")) parts.add(Ui.tr("Series"));
         if (genres != null && genres.length() > 0) {
