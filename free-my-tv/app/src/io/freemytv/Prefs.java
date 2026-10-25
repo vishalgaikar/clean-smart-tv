@@ -119,6 +119,21 @@ final class Prefs {
 
     static void setTheme(String v) { put("theme", v); }
 
+    // MARK: - Visual Themes
+    static final String THEME_PLATINUM = "platinum";
+    static final String THEME_AURORA = "aurora";
+    static final String THEME_GLASS = "glass";
+    static final String THEME_RUSKA = "ruska";
+    static final String THEME_SCENES = "scenes";
+    static final String THEME_SWEDEN = "sweden";
+    static final String THEME_FESTIVE = "festive";
+
+    static String visualTheme() {
+        return sp().getString("visual_theme", THEME_PLATINUM);
+    }
+
+    static void setVisualTheme(String v) { put("visual_theme", v); }
+
     // MARK: - City
 
     static String city() { return sp().getString("city", Config.CITY).trim(); }

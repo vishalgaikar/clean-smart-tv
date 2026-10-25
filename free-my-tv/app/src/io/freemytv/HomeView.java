@@ -105,7 +105,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static String[] tabs;
     private static int tabsGeneration = -1;
     private static final String[] TAB_KIND = {null, "movie", "tv", "favourites"};
-    private static final int Z_TOP = 4, Z_CARDS = 5;
+    private static final int Z_TOP = 4, Z_CARDS = 5, Z_THEME_PICKER = 6;
 
     private final Activity activity;
     private final Scene scene = new Scene();
@@ -145,6 +145,45 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int widgetIndex;    // with TalkBack on, the drawer's weather (0) or quotes (1) card can take the focus
     private List<Recs.Pick> cards = new ArrayList<>();
     private final Map<String, Backdrop> favBackdropCache = new HashMap<>();
+    private final Map<String, Backdrop> themeBackdropCache = new HashMap<>();
+
+    static final class ThemeItem {
+        final String id;
+        final String name;
+        final String desc;
+        final int[] palette;
+
+        ThemeItem(String id, String name, String desc, int[] palette) {
+            this.id = id;
+            this.name = name;
+            this.desc = desc;
+            this.palette = palette;
+        }
+    }
+
+    private static final List<ThemeItem> THEMES_LIST = Collections.unmodifiableList(java.util.Arrays.asList(
+            new ThemeItem(Prefs.THEME_PLATINUM, "Cinematic Platinum", "Dynamic movie backdrops & glass accents",
+                    new int[]{0xFFF5F6F8, 0xFF4A5568, 0xFF0B0E17}),
+            new ThemeItem(Prefs.THEME_AURORA, "Aurora Glow", "Teal & violet borealis over deep navy",
+                    new int[]{0xFF38BDF8, 0xFFA855F7, 0xFF070A14}),
+            new ThemeItem(Prefs.THEME_GLASS, "Frost Glass", "Translucent frosted glass & ambient ice",
+                    new int[]{0xFF7DD3FC, 0xFFE0F2FE, 0xFF090D1A}),
+            new ThemeItem(Prefs.THEME_RUSKA, "Nordic Ruska", "Autumn twilight over a calm Nordic lake",
+                    new int[]{0xFFF59E0B, 0xFF92400E, 0xFF0D0A08}),
+            new ThemeItem(Prefs.THEME_SCENES, "Illustrated Scenes", "Minimalist dark evening landscapes",
+                    new int[]{0xFF818CF8, 0xFFC084FC, 0xFF0F1026}),
+            new ThemeItem(Prefs.THEME_SWEDEN, "Sweden Night", "Starry northern skies & evening photography",
+                    new int[]{0xFF38BDF8, 0xFF1E3A8A, 0xFF060912}),
+            new ThemeItem(Prefs.THEME_FESTIVE, "Festive Gold", "Warm marigold accents & golden glow",
+                    new int[]{0xFFFFB23C, 0xFFB45309, 0xFF160A08})
+    ));
+
+    private final Spring themePickerSpring = new Spring(0.35f, 0.88f, 0);
+    private boolean themePickerOpen;
+    private int themePickerIndex = 0;
+    private final Spring[] themeItemFocus = new Spring[THEMES_LIST.size()];
+    private Paint themeTitlePaint, themeSubtitlePaint, themeItemTitle, themeItemDesc, themeBadgePaint;
+
     private final Spring[] topFocus = new Spring[TAB_COUNT + HomeApps.MAX_TOP];
     private final RectF[] topRects = new RectF[TAB_COUNT + HomeApps.MAX_TOP];
     private final Spring[] cardFocus = new Spring[4];
@@ -420,6 +459,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             cardFocus[i] = new Spring(0.32f, 0.78f, 0);
             cardRects[i] = new RectF();
         }
+        for (int i = 0; i < themeItemFocus.length; i++) {
+            themeItemFocus[i] = new Spring(0.26f, 0.85f, 0);
+        }
         setLightButtons(HomeApps.topButtons());
         recs.setLight(true);
         checkNight(false);
@@ -568,7 +610,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float kk = width / 1920f;
         measure(sky, width, height);
         measure(heroLayer, width, Math.round(880 * kk));
-        measure(status, Math.round(1160 * kk), Math.round(240 * kk));
+        measure(status, Math.round(1160 * kk), Math.round(880 * kk));
         // Sized to what they draw (the glass and its shadow; the grown tiles and their shadows): smaller layers are
         // cheaper for the GPU to composite on every frame of the drawer animation.
         measure(platter, width, Math.round(320 * kk));
@@ -656,6 +698,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lHeroDesc = new TextPaint(Ui.text(Ui.regular, 20 * k, 0xC7FFFFFF));
         lHeroDesc.setShadowLayer(10 * k, 0, 2 * k, 0x99000000);
         lHeroBtnText = Ui.text(Ui.semibold, 21 * k, 0xFFFFFFFF);
+        themeTitlePaint = Ui.text(Ui.displaySemibold, 26 * k, 0xFFFFFFFF);
+        themeSubtitlePaint = Ui.text(Ui.medium, 15 * k, 0x99FFFFFF);
+        themeItemTitle = Ui.text(Ui.semibold, 19 * k, 0xFFFFFFFF);
+        themeItemDesc = Ui.text(Ui.regular, 13 * k, 0x99FFFFFF);
+        themeBadgePaint = Ui.text(Ui.semibold, 13 * k, 0xFF30D158);
         lightGradient = null;
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
         capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
@@ -711,8 +758,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (reorderAnim) tilesMoving |= stepReorder(dt, up);
         boolean statusMoving = step(statusFocus, dt);
         boolean heroMoving = heroFocus.step(dt);
+        boolean pickerMoving = themePickerSpring.step(dt) | step(themeItemFocus, dt);
         boolean topMoving = step(topFocus, dt), cardsMoving = step(cardFocus, dt);
-        if (topMoving) status.invalidate();
+        if (topMoving || pickerMoving) status.invalidate();
         heroMoving |= topMoving | cardsMoving;
         boolean drawerItemsMoving = step(drawerFocus, dt);
         boolean gridMoving = step(gridFocus, dt) | scroll.step(dt);
@@ -729,7 +777,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // they rise; the drawer is drawn resting in place; the glass shelf is redrawn once the drawer stops, so the
         // glass shows the background where it ended up.
         if (tilesMoving || tilesDirty) tiles.invalidate();
-        if (statusMoving || statusDirty || bgFading) status.invalidate();
+        if (statusMoving || statusDirty || bgFading || pickerMoving) status.invalidate();
         if (heroMoving || heroDirty || heroFading) heroLayer.invalidate();
         if (drawerItemsMoving || drawerDirty || bgFading) drawerLayer.invalidate();
         if (gridMoving || gridDirty) sheetLayer.invalidate();
@@ -1818,6 +1866,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean topChanged = aim(topFocus, !sheetOpen && zone == Z_TOP ? topIndex : -1, snap);
         heroChanged |= aim(cardFocus, !sheetOpen && zone == Z_CARDS ? cardIndex : -1, snap) | topChanged;
         statusChanged |= topChanged;
+        statusChanged |= aim(themeItemFocus, themePickerOpen && zone == Z_THEME_PICKER ? themePickerIndex : -1, snap);
         tilesDirty |= snap || tilesChanged;
         statusDirty |= snap || statusChanged;
         heroDirty |= snap || heroChanged;
@@ -2145,7 +2194,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void back() {
-        if (sheetOpen) {
+        if (themePickerOpen) {
+            closeThemePicker();
+        } else if (sheetOpen) {
             closeSheet();
         } else if (zone == Z_DRAWER || zone == WIDGETS) {
             closeDrawer();
@@ -2307,6 +2358,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (drawerItems.isEmpty()) return;
             it = drawerItems.get(drawerIndex);
             r = drawerRects[drawerIndex];
+        } else if (zone == Z_THEME_PICKER) {
+            if (themePickerIndex >= 0 && themePickerIndex < THEMES_LIST.size()) {
+                ThemeItem sel = THEMES_LIST.get(themePickerIndex);
+                applyVisualTheme(sel.id);
+                showToast(sel.name + " applied");
+            }
+            click.open();
+            closeThemePicker();
+            return;
         } else if (zone == Z_TOP) {
             if (topIndex < TAB_COUNT) {
                 selectTab(topIndex);
@@ -2340,6 +2400,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         click.open();
         if (it.kind == HomeApps.ALL_APPS) {
             openSheet();
+            return;
+        }
+        if (it.kind == HomeApps.THEMES) {
+            openThemePicker();
             return;
         }
         if (it.kind == HomeApps.INPUTS) {
@@ -2605,6 +2669,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void a11yItems(List<Integer> out) {
+        if (themePickerOpen) {
+            for (int i = 0; i < THEMES_LIST.size(); i++) out.add(a11yId(Z_THEME_PICKER, i));
+            return;
+        }
         if (sheetOpen) {
             for (int i = 0; i < others.size(); i++) out.add(a11yId(GRID, i));
             return;
@@ -2635,6 +2703,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 return label(shelf, i);
             case Z_DRAWER: return label(drawerItems, i);
             case WIDGETS: return i == 0 ? weatherText() : quotesText();
+            case Z_THEME_PICKER:
+                if (i >= THEMES_LIST.size()) return "";
+                return THEMES_LIST.get(i).name + ", " + THEMES_LIST.get(i).desc;
             default: return "";
         }
     }
@@ -2681,6 +2752,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 a11yRect.set(i == 0 ? weatherCard : quotesCard);
                 dy = 0;
                 break;
+            case Z_THEME_PICKER: {
+                if (!themePickerOpen || i >= THEMES_LIST.size()) return false;
+                float cardW = 480 * k, cardR = CONTENT_R * k, cardL = cardR - cardW;
+                float itemTop = (150 + 75 + i * 68) * k;
+                a11yRect.set(cardL + 14 * k, itemTop, cardR - 14 * k, itemTop + 62 * k);
+                dy = status.getTranslationY();
+                break;
+            }
             default:
                 return false;
         }
@@ -2693,6 +2772,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private int a11yFocused() {
+        if (themePickerOpen) return a11yId(Z_THEME_PICKER, themePickerIndex);
         if (sheetOpen) return others.isEmpty() ? -1 : a11yId(GRID, gridIndex);
         switch (zone) {
             case Z_TOP: return a11yId(Z_TOP, topIndex);
@@ -2734,6 +2814,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         if (sheetOpen || reordering) return;
         switch (group) {
+            case Z_THEME_PICKER:
+                if (i < THEMES_LIST.size()) {
+                    themePickerIndex = i;
+                    retarget(false);
+                    status.invalidate();
+                }
+                break;
             case Z_DRAWER:
                 if (i >= drawerItems.size()) return;
                 if (!drawerOpen) openDrawer();
@@ -2883,9 +2970,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void updateHeroBackdrop() {
         if (cards.isEmpty()) return;
-        Recs.Pick p = cards.get(Math.min(featuredIndex, cards.size() - 1));
-        Backdrop b = tab == TAB_FAVOURITES ? getFavBackdrop(p) : recs.backdrop(p);
-        if (b != null) showBackdrop(b);
+        String curTheme = Prefs.visualTheme();
+        Backdrop themeBg = getThemeBackdrop(curTheme);
+        if (themeBg != null) {
+            showBackdrop(themeBg);
+        } else {
+            Recs.Pick p = cards.get(Math.min(featuredIndex, cards.size() - 1));
+            Backdrop b = tab == TAB_FAVOURITES ? getFavBackdrop(p) : recs.backdrop(p);
+            if (b != null) showBackdrop(b);
+        }
         heroDirty = true;
         sky.invalidate();
         heroLayer.invalidate();
@@ -2936,6 +3029,68 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return null;
     }
 
+    private Backdrop getThemeBackdrop(String themeId) {
+        if (themeId == null || Prefs.THEME_PLATINUM.equals(themeId)) return null;
+        if (themeBackdropCache.containsKey(themeId)) return themeBackdropCache.get(themeId);
+        try {
+            android.content.res.AssetManager am = getContext().getAssets();
+            try (java.io.InputStream in = am.open("themes/" + themeId + ".jpg")) {
+                Bitmap bmp = BitmapFactory.decodeStream(in);
+                if (bmp != null) {
+                    Backdrop b = Backdrop.make(bmp, true, false);
+                    themeBackdropCache.put(themeId, b);
+                    return b;
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private void applyVisualTheme(String id) {
+        Prefs.setVisualTheme(id);
+        Backdrop b = getThemeBackdrop(id);
+        if (b != null) {
+            showBackdrop(b);
+        } else {
+            Recs.Pick featured = cards.isEmpty() ? null : cards.get(Math.min(featuredIndex, cards.size() - 1));
+            Backdrop fb = tab == TAB_FAVOURITES ? getFavBackdrop(featured) : (featured != null ? recs.backdrop(featured) : null);
+            if (fb != null) showBackdrop(fb);
+        }
+        invalidateAll();
+    }
+
+    private void openThemePicker() {
+        themePickerOpen = true;
+        zone = Z_THEME_PICKER;
+        themePickerSpring.target = 1;
+        String cur = Prefs.visualTheme();
+        themePickerIndex = 0;
+        for (int i = 0; i < THEMES_LIST.size(); i++) {
+            if (THEMES_LIST.get(i).id.equals(cur)) {
+                themePickerIndex = i;
+                break;
+            }
+        }
+        retarget(false);
+        click.open();
+        status.invalidate();
+    }
+
+    private void closeThemePicker() {
+        themePickerOpen = false;
+        themePickerSpring.target = 0;
+        zone = Z_TOP;
+        for (int i = 0; i < lightButtons.size(); i++) {
+            if (lightButtons.get(i).kind == HomeApps.THEMES) {
+                topIndex = TAB_COUNT + i;
+                break;
+            }
+        }
+        retarget(false);
+        click.move();
+        status.invalidate();
+    }
+
     /** The featured shows of the current tab (Explore, Movies, Shows) and the cinematic background. */
     private void updateCards() {
         List<Recs.Pick> list;
@@ -2953,7 +3108,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 retarget(false);
             }
         }
-        if (tab == TAB_FAVOURITES) {
+        String curTheme = Prefs.visualTheme();
+        Backdrop themeBg = getThemeBackdrop(curTheme);
+        if (themeBg != null) {
+            showBackdrop(themeBg);
+        } else if (tab == TAB_FAVOURITES) {
             if (!cards.isEmpty()) {
                 showBackdrop(getFavBackdrop(cards.get(Math.min(featuredIndex, cards.size() - 1))));
             }
@@ -3279,9 +3438,146 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawText(label, x, r.bottom + (40 + 4 * f) * k, lTip);
             }
         }
+        drawThemePicker(c);
+    }
+
+    private void drawThemePicker(Canvas c) {
+        float open = themePickerSpring.value;
+        if (open <= 0.001f && !themePickerOpen) return;
+
+        float alpha = Ui.clamp(open);
+        float scale = 0.94f + 0.06f * alpha;
+
+        float cardW = 480 * k;
+        float cardR = CONTENT_R * k;
+        float cardL = cardR - cardW;
+        float cardT = 150 * k;
+        float rowH = 68 * k;
+        float headerH = 75 * k;
+        float padB = 16 * k;
+        float cardH = headerH + THEMES_LIST.size() * rowH + padB;
+        float cardB = cardT + cardH;
+
+        c.save();
+        float pivotX = cardR - 40 * k;
+        float pivotY = cardT;
+        c.scale(scale, scale, pivotX, pivotY);
+
+        RectF cardRect = new RectF(cardL, cardT, cardR, cardB);
+        tmp.set(cardRect);
+        tmp.offset(0, 14 * k);
+        shadowDeep.setColor(Ui.alpha(0xFF000000, 0.50f * alpha));
+        shadows.draw(c, tmp, 28 * k, DEEP_BLUR * k, shadowDeep);
+
+        fill.setShader(null);
+        fill.setStyle(Paint.Style.FILL);
+        fill.setColor(Ui.alpha(0xF2121722, alpha));
+        c.drawRoundRect(cardRect, 28 * k, 28 * k, fill);
+
+        border.setStyle(Paint.Style.STROKE);
+        border.setStrokeWidth(1.5f * k);
+        border.setColor(Ui.alpha(0x33FFFFFF, alpha));
+        c.drawRoundRect(cardRect, 28 * k, 28 * k, border);
+
+        if (themeTitlePaint != null) {
+            themeTitlePaint.setAlpha(Math.round(255 * alpha));
+            c.drawText(Ui.tr("Themes"), cardL + 28 * k, cardT + 42 * k, themeTitlePaint);
+        }
+        if (themeSubtitlePaint != null) {
+            themeSubtitlePaint.setAlpha(Math.round(180 * alpha));
+            c.drawText(Ui.tr("Choose a visual style"), cardL + 28 * k, cardT + 64 * k, themeSubtitlePaint);
+        }
+
+        fill.setStyle(Paint.Style.FILL);
+        fill.setColor(Ui.alpha(0x1AFFFFFF, alpha));
+        c.drawRect(cardL + 20 * k, cardT + headerH - 4 * k, cardR - 20 * k, cardT + headerH - 3 * k, fill);
+
+        String activeTheme = Prefs.visualTheme();
+
+        for (int i = 0; i < THEMES_LIST.size(); i++) {
+            ThemeItem item = THEMES_LIST.get(i);
+            float itemTop = cardT + headerH + i * rowH;
+            float itemBottom = itemTop + rowH - 6 * k;
+            RectF rowRect = new RectF(cardL + 14 * k, itemTop, cardR - 14 * k, itemBottom);
+
+            float f = Ui.clamp(themeItemFocus[i].value);
+            boolean isCur = item.id.equals(activeTheme);
+
+            if (f > 0.01f) {
+                fill.setStyle(Paint.Style.FILL);
+                fill.setColor(Ui.alpha(0x28FFFFFF, alpha * f));
+                c.drawRoundRect(rowRect, 18 * k, 18 * k, fill);
+
+                border.setStyle(Paint.Style.STROKE);
+                border.setStrokeWidth(2f * k);
+                border.setColor(Ui.alpha(item.palette[0], alpha * f * 0.9f));
+                c.drawRoundRect(rowRect, 18 * k, 18 * k, border);
+            } else if (isCur) {
+                fill.setStyle(Paint.Style.FILL);
+                fill.setColor(Ui.alpha(0x14FFFFFF, alpha));
+                c.drawRoundRect(rowRect, 18 * k, 18 * k, fill);
+            }
+
+            float swatchStartX = rowRect.left + 22 * k;
+            float swatchY = rowRect.centerY();
+            float dotR = 6 * k;
+            float dotGap = 15 * k;
+            for (int p = 0; p < item.palette.length && p < 3; p++) {
+                fill.setStyle(Paint.Style.FILL);
+                fill.setColor(Ui.alpha(item.palette[p], alpha));
+                c.drawCircle(swatchStartX + p * dotGap, swatchY, dotR, fill);
+                border.setStyle(Paint.Style.STROKE);
+                border.setStrokeWidth(1f * k);
+                border.setColor(Ui.alpha(0x40000000, alpha));
+                c.drawCircle(swatchStartX + p * dotGap, swatchY, dotR, border);
+            }
+
+            float textX = swatchStartX + 3 * dotGap + 12 * k;
+            if (themeItemTitle != null) {
+                int titleColor = f > 0.01f ? blend(0xFFFFFFFF, item.palette[0], 0.35f * f) : (isCur ? 0xFFFFFFFF : 0xE6FFFFFF);
+                themeItemTitle.setColor(Ui.alpha(titleColor, alpha));
+                c.drawText(item.name, textX, rowRect.top + 26 * k, themeItemTitle);
+            }
+
+            if (themeItemDesc != null) {
+                int descColor = f > 0.01f ? 0xCCFFFFFF : 0x88FFFFFF;
+                themeItemDesc.setColor(Ui.alpha(descColor, alpha));
+                c.drawText(item.desc, textX, rowRect.top + 46 * k, themeItemDesc);
+            }
+
+            if (isCur) {
+                float badgeR = rowRect.right - 18 * k;
+                float badgeY = rowRect.centerY();
+                fill.setStyle(Paint.Style.FILL);
+                fill.setColor(Ui.alpha(0xFF30D158, alpha));
+                c.drawCircle(badgeR - 44 * k, badgeY, 4 * k, fill);
+
+                if (themeBadgePaint != null) {
+                    themeBadgePaint.setColor(Ui.alpha(0xFF30D158, alpha));
+                    c.drawText("Active", badgeR - 34 * k, badgeY + Ui.halfCap(themeBadgePaint), themeBadgePaint);
+                }
+            }
+        }
+
+        c.restore();
     }
 
     private boolean moveLight(int dx, int dy) {
+        if (zone == Z_THEME_PICKER) {
+            if (dy != 0) {
+                int next = Math.max(0, Math.min(THEMES_LIST.size() - 1, themePickerIndex + dy));
+                if (next != themePickerIndex) {
+                    themePickerIndex = next;
+                    click.move();
+                    retarget(false);
+                }
+                return true;
+            } else if (dx < 0) {
+                closeThemePicker();
+                return true;
+            }
+            return true;
+        }
         switch (zone) {
             case Z_SHELF:
                 if (dy >= 0) return false;
