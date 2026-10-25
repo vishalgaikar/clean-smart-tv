@@ -65,8 +65,10 @@ final class RemoteKeys {
         }
         boolean ours = false;
         for (int key : Prefs.KEYS) ours |= key == keyCode;
+        AppLog.w("RemoteKeys check: SONY=" + SONY + " rawCode=" + e.getKeyCode() + " scan=" + e.getScanCode() + " mappedCode=" + keyCode + " ours=" + ours);
         if (!ours) return false;
         String pkg = Prefs.keyApp(keyCode);
+        AppLog.w("RemoteKeys pkg for " + keyCode + ": '" + pkg + "'");
         if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
         if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
             // Our own package means the home screen in use (Xiaomi's Mi button): ours, or the TV's own after the
