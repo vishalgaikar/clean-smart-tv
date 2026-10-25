@@ -58,7 +58,7 @@ final class HomeData {
     private static String aqiUrl() {
         return "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + "&current=us_aqi,pm2_5";
     }
-    private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
+    private static final long PRICES_EVERY = 60_000L, WEATHER_EVERY = 30 * 60_000L;
     interface Listener { void onData(); }
 
     /** BTC, ETH and SOL; in Brazilian reais also the dollar (USDT/BRL), which Binance doesn't list for most currencies. */
@@ -193,7 +193,7 @@ final class HomeData {
             if (Prefs.quotes()) {
                 String p = cache.getString("prices", null);
                 if (p != null) parsePrices(p);
-                pricesAt = cache.getLong("pricesAt", 0);
+                pricesAt = 0;
             }
             String w = cache.getString("weather", null);
             // The cached forecast is for the city it was fetched for; another city means fetch again.
@@ -285,6 +285,89 @@ final class HomeData {
     private void fetchSmartFeed() {
         boolean cricketFound = false;
         try {
+            cricketFound = fetchCricbuzz();
+        } catch (Exception e) {
+            AppLog.w("cricbuzz: " + e.getMessage());
+        }
+        if (!cricketFound) {
+            try {
+                cricketFound = fetchCricinfoRss();
+            } catch (Exception e) {
+                AppLog.w("cricinfo rss: " + e.getMessage());
+            }
+        }
+        cricket.live = cricketFound;
+        if (!cricketFound) {
+            fetchMarkets();
+        }
+    }
+
+    private boolean fetchCricbuzz() {
+        try {
+            String html = get("https://www.cricbuzz.com/cricket-match/live-scores");
+            String keyword = "\\\"matchInfo\\\":";
+            int pos = 0;
+            while (true) {
+                int idx = html.indexOf(keyword, pos);
+                if (idx == -1) break;
+                pos = idx + keyword.length();
+                int nextIdx = html.indexOf(keyword, pos);
+                String block = nextIdx != -1 ? html.substring(idx, nextIdx) : html.substring(idx, Math.min(html.length(), idx + 3500));
+                String clean = block.replace("\\\"", "\"").replace("\\\\", "\\");
+
+                // Team 1 & 2
+                java.util.regex.Matcher t1M = java.util.regex.Pattern.compile("\"team1\":\\{[^\\}]*\"teamName\":\"([^\"]+)\"[^\\}]*\"teamSName\":\"([^\"]+)\"").matcher(clean);
+                java.util.regex.Matcher t2M = java.util.regex.Pattern.compile("\"team2\":\\{[^\\}]*\"teamName\":\"([^\"]+)\"[^\\}]*\"teamSName\":\"([^\"]+)\"").matcher(clean);
+                if (!t1M.find() || !t2M.find()) continue;
+
+                String t1Name = t1M.group(1), t1Code = t1M.group(2);
+                String t2Name = t2M.group(1), t2Code = t2M.group(2);
+
+                java.util.regex.Matcher stateM = java.util.regex.Pattern.compile("\"state\":\"([^\"]+)\"").matcher(clean);
+                String state = stateM.find() ? stateM.group(1) : "";
+
+                boolean isIndia = "IND".equalsIgnoreCase(t1Code) || "INDW".equalsIgnoreCase(t1Code) || "INDA".equalsIgnoreCase(t1Code)
+                        || "IND".equalsIgnoreCase(t2Code) || "INDW".equalsIgnoreCase(t2Code) || "INDA".equalsIgnoreCase(t2Code)
+                        || t1Name.toLowerCase(Locale.US).startsWith("india") || t2Name.toLowerCase(Locale.US).startsWith("india");
+
+                boolean isLiveState = "In Progress".equalsIgnoreCase(state) || "Toss".equalsIgnoreCase(state) || "Live".equalsIgnoreCase(state);
+
+                if (isIndia && isLiveState) {
+                    java.util.regex.Matcher descM = java.util.regex.Pattern.compile("\"matchDesc\":\"([^\"]+)\"").matcher(clean);
+                    java.util.regex.Matcher seriesM = java.util.regex.Pattern.compile("\"seriesName\":\"([^\"]+)\"").matcher(clean);
+                    java.util.regex.Matcher statusM = java.util.regex.Pattern.compile("\"status\":\"([^\"]+)\"").matcher(clean);
+
+                    String desc = descM.find() ? descM.group(1) : "";
+                    String series = seriesM.find() ? seriesM.group(1) : "";
+                    String status = statusM.find() ? statusM.group(1) : "";
+
+                    java.util.regex.Matcher s1M = java.util.regex.Pattern.compile("\"team1Score\":\\{.*?\"runs\":(\\d+).*?\"wickets\":(\\d+).*?\"overs\":([\\d\\.]+)").matcher(clean);
+                    java.util.regex.Matcher s2M = java.util.regex.Pattern.compile("\"team2Score\":\\{.*?\"runs\":(\\d+).*?\"wickets\":(\\d+).*?\"overs\":([\\d\\.]+)").matcher(clean);
+
+                    String s1 = s1M.find() ? s1M.group(1) + "/" + s1M.group(2) + " (" + s1M.group(3) + ")" : ("Toss".equalsIgnoreCase(state) ? "Yet to bat" : "0/0 (0)");
+                    String s2 = s2M.find() ? s2M.group(1) + "/" + s2M.group(2) + " (" + s2M.group(3) + ")" : ("Toss".equalsIgnoreCase(state) ? "Yet to bat" : "0/0 (0)");
+
+                    cricket.matchName = desc.isEmpty() ? series : (desc + " · " + series);
+                    cricket.team1 = t1Name;
+                    cricket.team1Code = teamCode(t1Code.isEmpty() ? t1Name : t1Code);
+                    cricket.score1 = s1;
+                    cricket.team2 = t2Name;
+                    cricket.team2Code = teamCode(t2Code.isEmpty() ? t2Name : t2Code);
+                    cricket.score2 = s2;
+                    cricket.status = status.isEmpty() ? ("Toss".equalsIgnoreCase(state) ? "Toss complete" : "Match in progress") : status;
+                    cricket.batsman = "Live International Cricket";
+
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            AppLog.w("cricbuzz parse: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private boolean fetchCricinfoRss() {
+        try {
             String xml = get("https://static.cricinfo.com/rss/livescores.xml");
             int itemIdx = 0;
             while ((itemIdx = xml.indexOf("<item>", itemIdx)) != -1) {
@@ -295,19 +378,17 @@ final class HomeData {
                 String title = extractTag(item, "title");
                 String desc = extractTag(item, "description");
                 String lower = title.toLowerCase(Locale.US);
-                if (lower.contains("india") || lower.contains("ind w") || lower.contains("india women")) {
+                boolean isIndia = lower.contains("india women") || lower.contains("ind w")
+                        || (lower.contains("india") && !lower.contains("hyderabad (india)"));
+                if (isIndia) {
                     parseCricketMatch(title, desc);
-                    cricketFound = true;
-                    break;
+                    return true;
                 }
             }
         } catch (Exception e) {
-            AppLog.w("cricket fetch: " + e.getMessage());
+            AppLog.w("cricinfo rss: " + e.getMessage());
         }
-        cricket.live = cricketFound;
-        if (!cricketFound) {
-            fetchMarkets();
-        }
+        return false;
     }
 
     private void parseCricketMatch(String title, String desc) {
@@ -355,19 +436,19 @@ final class HomeData {
     private static String teamCode(String name) {
         if (name == null || name.isEmpty()) return "IND";
         String lower = name.toLowerCase(Locale.US);
-        if (lower.contains("india women")) return "IND W";
-        if (lower.contains("india")) return "IND";
-        if (lower.contains("australia")) return "AUS";
-        if (lower.contains("england")) return "ENG";
-        if (lower.contains("pakistan")) return "PAK";
-        if (lower.contains("south africa")) return "SA";
-        if (lower.contains("new zealand")) return "NZ";
-        if (lower.contains("sri lanka")) return "SL";
-        if (lower.contains("bangladesh")) return "BAN";
-        if (lower.contains("west indies")) return "WI";
-        if (lower.contains("zimbabwe")) return "ZIM";
-        if (name.length() >= 3) return name.substring(0, 3).toUpperCase(Locale.US);
-        return name.toUpperCase(Locale.US);
+        if (lower.contains("ind w") || lower.contains("indw") || lower.contains("india women")) return "IND W";
+        if (lower.contains("india") || "ind".equalsIgnoreCase(name)) return "IND";
+        if (lower.contains("australia") || "aus".equalsIgnoreCase(name)) return "AUS";
+        if (lower.contains("zimbabwe") || "zim".equalsIgnoreCase(name) || "zimw".equalsIgnoreCase(name)) return "ZIM";
+        if (lower.contains("england") || "eng".equalsIgnoreCase(name)) return "ENG";
+        if (lower.contains("pakistan") || "pak".equalsIgnoreCase(name)) return "PAK";
+        if (lower.contains("south africa") || "sa".equalsIgnoreCase(name)) return "SA";
+        if (lower.contains("new zealand") || "nz".equalsIgnoreCase(name)) return "NZ";
+        if (lower.contains("sri lanka") || "sl".equalsIgnoreCase(name)) return "SL";
+        if (lower.contains("bangladesh") || "ban".equalsIgnoreCase(name)) return "BAN";
+        if (lower.contains("west indies") || "wi".equalsIgnoreCase(name)) return "WI";
+        if (name.length() <= 4) return name.toUpperCase(Locale.US);
+        return name.substring(0, 3).toUpperCase(Locale.US);
     }
 
     private void fetchMarkets() {
