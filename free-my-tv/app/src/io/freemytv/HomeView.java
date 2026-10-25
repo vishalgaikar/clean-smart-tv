@@ -311,6 +311,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Paint labelPaint, metaPaint, clockPaint, buttonPaint, capsuleText, tipPaint, quotePaint, staleQuote;
     private Paint rowTitle, drawerLabel, cardTitle, cardText, cardDim, cardDimRight, bigTemp, hourPaint, hourTemp;
     private Paint pricePaint, changePaint, sheetTitle;
+    private Paint liveBadgePaint, badgeTextPaint, marketValPaint, marketChangePaint, stripLeftPaint, stripRightPaint, pillTextPaint, scoreBigPaint;
     private TextPaint titlePaint, gridLabel, toastPaint;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint imagePaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
@@ -731,6 +732,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         pricePaint.setTextAlign(Paint.Align.RIGHT);
         changePaint = Ui.numbers(Ui.semibold, 21 * k, 0xFFFFFFFF);
         changePaint.setTextAlign(Paint.Align.CENTER);
+        liveBadgePaint = Ui.text(Ui.semibold, 13 * k, 0xFFFFFFFF);
+        liveBadgePaint.setTextAlign(Paint.Align.CENTER);
+        badgeTextPaint = Ui.text(Ui.semibold, 15 * k, 0xFFFFFFFF);
+        badgeTextPaint.setTextAlign(Paint.Align.CENTER);
+        marketValPaint = Ui.numbers(Ui.semibold, 24 * k, 0xF2FFFFFF);
+        marketChangePaint = Ui.numbers(Ui.semibold, 15 * k, 0xFF30D158);
+        stripLeftPaint = Ui.text(Ui.semibold, 15 * k, 0xFF38BDF8);
+        stripRightPaint = Ui.text(Ui.semibold, 15 * k, 0xFF30D158);
+        stripRightPaint.setTextAlign(Paint.Align.RIGHT);
+        pillTextPaint = Ui.text(Ui.medium, 14 * k, 0xF2FFFFFF);
+        scoreBigPaint = Ui.numbers(Ui.semibold, 26 * k, 0xFFFFFFFF);
         sheetTitle = Ui.text(Ui.displaySemibold, 40 * k, 0xFFFFFFFF);
         sheetTitle.setTextAlign(Paint.Align.CENTER);
         gridLabel = new TextPaint(Ui.text(Ui.medium, 24 * k, 0x99FFFFFF));
@@ -1591,8 +1603,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             snap(drawerRects[i]);
             x += tw + gap;
         }
-        float cardsTop = CARDS_TOP * k, split = left + (right - left) * 0.585f;
-        boolean wx = Prefs.weather(), qt = Prefs.quotes() && HomeData.active().length > 0;
+        float cardsTop = CARDS_TOP * k, split = left + (right - left) * 0.50f;
+        boolean wx = Prefs.weather(), qt = Prefs.quotes();
         // A card that is off gives its room to the other one.
         weatherCard.set(left, cardsTop, qt ? split - 16 * k : right, cardsTop + CARDS_H * k);
         quotesCard.set(wx ? split + 16 * k : left, cardsTop, right, cardsTop + CARDS_H * k);
@@ -1661,6 +1673,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         hourPaint.setColor(tone(L_DIM, 0xADFFFFFF));
         hourTemp.setColor(drawerInk(0.95f));
         pricePaint.setColor(drawerInk(0.95f));
+        marketValPaint.setColor(drawerInk(0.95f));
+        scoreBigPaint.setColor(drawerInk(1));
+        pillTextPaint.setColor(drawerInk(0.95f));
         float titleBase = ROW_TITLE * k;
         if (drawerInputs > 0) c.drawText(Ui.tr("Inputs"), drawerRects[0].left + 4 * k, titleBase, rowTitle);
         if (drawerInputs < drawerItems.size()) c.drawText(Ui.tr("Shortcuts"), drawerRects[drawerInputs].left + 4 * k, titleBase, rowTitle);
@@ -1669,7 +1684,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < drawerItems.size(); i++) if (i != top) drawDrawerTile(c, i);
         if (top >= 0) drawDrawerTile(c, top);
         if (Prefs.weather()) drawWeatherCard(c, weatherCard);
-        if (Prefs.quotes() && HomeData.active().length > 0) drawQuotesCard(c, quotesCard);
+        if (Prefs.quotes()) drawQuotesCard(c, quotesCard);
     }
 
     /** Square drawer button: symbol and name; an input with no device is dimmed. Focused: white, with dark text. */
@@ -1713,35 +1728,95 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         else drawWeather(c, r);
     }
 
+    private String sunCountdown(HomeData.Weather wx) {
+        long now = System.currentTimeMillis();
+        if (wx.sunset > now) {
+            long diff = wx.sunset - now;
+            long h = diff / 3_600_000L;
+            long m = (diff % 3_600_000L) / 60_000L;
+            return "☀️ " + Ui.tr("Sunset in") + " " + (h > 0 ? h + "h " : "") + m + "m · " + Ui.time(wx.sunset);
+        } else if (wx.sunrise > 0) {
+            long sr = wx.sunrise > now ? wx.sunrise : (wx.sunrise + 86400000L);
+            long diff = sr - now;
+            long h = diff / 3_600_000L;
+            long m = (diff % 3_600_000L) / 60_000L;
+            return "🌅 " + Ui.tr("Sunrise in") + " " + (h > 0 ? h + "h " : "") + m + "m · " + Ui.time(wx.sunrise);
+        }
+        return "";
+    }
+
     private void drawWeather(Canvas c, RectF r) {
         refreshDrawerText();
-        float x = r.left + 34 * k;
-        c.drawText(weatherTitle, x, r.top + 54 * k, cardTitle);
+        float leftPad = 28 * k;
+        c.drawText(weatherTitle, r.left + leftPad, r.top + 48 * k, cardTitle);
         HomeData.Weather wx = textWeather;
         if (Double.isNaN(wx.temp)) {
-            c.drawText(Ui.tr("No weather data right now."), x, r.top + 120 * k, cardDim);
+            c.drawText(Ui.tr("No weather data right now."), r.left + leftPad, r.top + 120 * k, cardDim);
             return;
         }
+
+        // AQI Capsule on top right
+        String aqiStr = wx.aqi + " AQI · " + wx.aqiLabel;
+        float aqiTextW = pillTextPaint.measureText(aqiStr);
+        float aqiPillW = aqiTextW + 34 * k;
+        float pillH = 30 * k;
+        float aqiRight = r.right - 28 * k;
+        float aqiLeft = aqiRight - aqiPillW;
+        float aqiTop = r.top + 26 * k;
+        float aqiBottom = aqiTop + pillH;
+        tmp.set(aqiLeft, aqiTop, aqiRight, aqiBottom);
+        fill.setShader(null);
+        fill.setColor(tone(0x0F000000, 0x1AFFFFFF));
+        c.drawRoundRect(tmp, pillH / 2, pillH / 2, fill);
+        border.setColor(tone(0x1A000000, 0x24FFFFFF));
+        c.drawRoundRect(tmp, pillH / 2, pillH / 2, border);
+        fill.setColor(wx.aqiColor);
+        c.drawCircle(aqiLeft + 14 * k, tmp.centerY(), 4.5f * k, fill);
+        pillTextPaint.setColor(drawerInk(0.95f));
+        c.drawText(aqiStr, aqiLeft + 25 * k, tmp.centerY() + Ui.halfCap(pillTextPaint), pillTextPaint);
+
+        // Sunset Tracker Capsule below AQI
+        String sunStr = sunCountdown(wx);
+        if (!sunStr.isEmpty()) {
+            float sunTextW = pillTextPaint.measureText(sunStr);
+            float sunPillW = sunTextW + 26 * k;
+            float sunRight = r.right - 28 * k;
+            float sunLeft = sunRight - sunPillW;
+            float sunTop = aqiBottom + 8 * k;
+            float sunBottom = sunTop + pillH;
+            tmp.set(sunLeft, sunTop, sunRight, sunBottom);
+            fill.setColor(tone(0x0F000000, 0x1AFFFFFF));
+            c.drawRoundRect(tmp, pillH / 2, pillH / 2, fill);
+            border.setColor(tone(0x1A000000, 0x24FFFFFF));
+            c.drawRoundRect(tmp, pillH / 2, pillH / 2, border);
+            pillTextPaint.setColor(0xFFFF9F0A);
+            c.drawText(sunStr, sunLeft + 13 * k, tmp.centerY() + Ui.halfCap(pillTextPaint), pillTextPaint);
+        }
+
+        // Left side: Weather Symbol + Big Temperature
         String symbol = Symbols.weather(wx.code, wx.isDay);
         float sw = Symbols.width(getContext(), symbol, 52 * k);
-        Symbols.draw(getContext(), c, symbol, x + sw / 2, r.top + 132 * k, 52 * k, drawerInk(0.95f));
-        c.drawText(nowTemp, x + sw + 18 * k - Ui.leftBearing(bigTemp, nowTemp), r.top + 170 * k, bigTemp);
-        c.drawText(HomeData.condition(wx.code, wx.isDay), x, r.top + 220 * k, cardText);
-        c.drawText(highLow, x, r.top + 258 * k, cardDim);
-        float split = r.left + 392 * k;
-        fill.setShader(null);
-        fill.setColor(tone(0x1A000000, 0x24FFFFFF));
-        c.drawRoundRect(split - k, r.top + 34 * k, split + k, r.bottom - 34 * k, k, k, fill);
-        float hx = split + 30 * k, hw = (r.right - 30 * k - hx) / 6;
+        Symbols.draw(getContext(), c, symbol, r.left + leftPad + sw / 2, r.top + 115 * k, 52 * k, drawerInk(0.95f));
+        c.drawText(nowTemp, r.left + leftPad + sw + 16 * k - Ui.leftBearing(bigTemp, nowTemp), r.top + 138 * k, bigTemp);
+
+        // Condition + High/Low
+        String cond = HomeData.condition(wx.code, wx.isDay);
+        if (!highLow.isEmpty()) cond += " · " + highLow;
+        c.drawText(cond, r.left + leftPad, r.top + 172 * k, cardText);
+
+        // Subtle horizontal divider
+        float divY = r.top + 192 * k;
+        fill.setColor(tone(0x14000000, 0x20FFFFFF));
+        c.drawRect(r.left + 24 * k, divY, r.right - 24 * k, divY + k, fill);
+
+        // Hourly forecast across 6 columns
+        float hw = (r.width() - 48 * k) / 6f;
         for (int i = 0; i < wx.hours.size() && i < 6; i++) {
-            float hc = hx + hw * (i + 0.5f);
-            c.drawText(hourText[i], hc, r.top + 96 * k, hourPaint);
-            Symbols.draw(getContext(), c, Symbols.weather(wx.hourCode.get(i), wx.hourDay.get(i)), hc, r.top + 142 * k, 30 * k, drawerInk(0.9f));
-            c.drawText(hourTempText[i], hc, r.top + 196 * k, hourTemp);
+            float hc = r.left + 24 * k + hw * (i + 0.5f);
+            c.drawText(hourText[i], hc, r.top + 222 * k, hourPaint);
+            Symbols.draw(getContext(), c, Symbols.weather(wx.hourCode.get(i), wx.hourDay.get(i)), hc, r.top + 254 * k, 26 * k, drawerInk(0.9f));
+            c.drawText(hourTempText[i], hc, r.top + 288 * k, hourTemp);
         }
-        float sx = hx, base = r.top + 258 * k;
-        if (wx.sunrise != 0) sx = sunItem(c, "sunrise", sunriseText, sx, base) + 36 * k;
-        if (wx.sunset != 0) sunItem(c, "sunset", sunsetText, sx, base);
     }
 
     private void refreshDrawerText() {
@@ -1781,11 +1856,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return x + sw + 10 * k + cardDim.measureText(label);
     }
 
-    /** Prices in the configured currency with the 24 h change (green/red, like Apple's Stocks app). */
+    /** Smart card: Live Cricket Match (IND Men/Women) or Market Watch (NIFTY/SENSEX/Gold). */
     private void drawQuotesCard(Canvas c, RectF r) {
         drawerCard(c, r);
-        if (Ui.LEGACY) quotesSnapshot.draw(c, r, drawerCardsKey(), cc -> drawPrices(cc, r));
-        else drawPrices(c, r);
+        if (Ui.LEGACY) quotesSnapshot.draw(c, r, drawerCardsKey(), cc -> drawSmartFeed(cc, r));
+        else drawSmartFeed(c, r);
     }
 
     /**
@@ -1825,29 +1900,98 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private final Snapshot weatherSnapshot = new Snapshot(), quotesSnapshot = new Snapshot();
 
-    private void drawPrices(Canvas c, RectF r) {
-        float x = r.left + 34 * k, right = r.right - 34 * k;
+    private void drawSmartFeed(Canvas c, RectF r) {
         refreshDrawerText();
-        c.drawText(Ui.tr("Crypto"), x, r.top + 54 * k, cardTitle);
-        c.drawText(staleText, right, r.top + 54 * k, cardDimRight);
-        float cap = Ui.cap(cardText);
-        int[] coins = HomeData.active();
-        for (int j = 0; j < coins.length; j++) {
-            int i = coins[j];
-            float base = r.top + (110 + 52 * j) * k, mid = base - cap / 2;
-            float gw = Glyphs.width(getContext(), HomeData.COINS[i], cap);
-            Glyphs.coin(getContext(), c, HomeData.COINS[i], x + 14 * k, mid, cap, tone(L_DIM, 0xCCFFFFFF));
-            c.drawText(HomeData.coinName(i), x + Math.max(gw, 28 * k) / 2 + 30 * k, base, cardText);
-            c.drawText(priceText[i], right - 128 * k, base, pricePaint);
-            double change = data.changes[i];
-            if (Double.isNaN(change)) continue;
-            int color = change >= 0 ? tone(0xFF248A3D, UP_COLOR) : tone(0xFFD70015, DOWN_COLOR);
-            tmp.set(right - 108 * k, mid - 17 * k, right, mid + 17 * k);
-            fill.setShader(null);
-            fill.setColor(Ui.alpha(color, 0.2f));
-            c.drawRoundRect(tmp, 17 * k, 17 * k, fill);
-            changePaint.setColor(color);
-            c.drawText(changeText[i], tmp.centerX(), mid + Ui.halfCap(changePaint), changePaint);
+        fill.setShader(null);
+        if (data.cricket.live) {
+            // Live Cricket Card
+            c.drawText("🏏 " + data.cricket.matchName, r.left + 28 * k, r.top + 48 * k, cardTitle);
+
+            // LIVE pill
+            tmp.set(r.right - 88 * k, r.top + 28 * k, r.right - 28 * k, r.top + 56 * k);
+            fill.setColor(0xFFFF3B30);
+            c.drawRoundRect(tmp, 14 * k, 14 * k, fill);
+            fill.setColor(0xFFFFFFFF);
+            c.drawCircle(tmp.left + 14 * k, tmp.centerY(), 3.5f * k, fill);
+            c.drawText("LIVE", tmp.left + 36 * k, tmp.centerY() + Ui.halfCap(liveBadgePaint), liveBadgePaint);
+
+            // Left Team
+            float cx1 = r.left + 54 * k, cy1 = r.top + 130 * k, rad = 24 * k;
+            fill.setColor(0xFF1E3A8A);
+            c.drawCircle(cx1, cy1, rad, fill);
+            border.setColor(0x33FFFFFF);
+            c.drawCircle(cx1, cy1, rad, border);
+            badgeTextPaint.setColor(0xFFFFFFFF);
+            c.drawText(data.cricket.team1Code, cx1, cy1 + Ui.halfCap(badgeTextPaint), badgeTextPaint);
+
+            c.drawText(data.cricket.team1, r.left + 90 * k, r.top + 118 * k, cardText);
+            c.drawText(data.cricket.score1, r.left + 90 * k, r.top + 158 * k, scoreBigPaint);
+
+            // Center VS
+            cardDim.setTextAlign(Paint.Align.CENTER);
+            c.drawText("VS", r.centerX(), r.top + 136 * k, cardDim);
+            cardDim.setTextAlign(Paint.Align.LEFT);
+
+            // Right Team
+            float cx2 = r.right - 54 * k, cy2 = r.top + 130 * k;
+            fill.setColor(0xFFEAB308);
+            c.drawCircle(cx2, cy2, rad, fill);
+            border.setColor(0x33FFFFFF);
+            c.drawCircle(cx2, cy2, rad, border);
+            badgeTextPaint.setColor(0xFF000000);
+            c.drawText(data.cricket.team2Code, cx2, cy2 + Ui.halfCap(badgeTextPaint), badgeTextPaint);
+            badgeTextPaint.setColor(0xFFFFFFFF);
+
+            scoreBigPaint.setTextAlign(Paint.Align.RIGHT);
+            cardText.setTextAlign(Paint.Align.RIGHT);
+            c.drawText(data.cricket.team2, r.right - 90 * k, r.top + 118 * k, cardText);
+            c.drawText(data.cricket.score2, r.right - 90 * k, r.top + 158 * k, scoreBigPaint);
+            scoreBigPaint.setTextAlign(Paint.Align.LEFT);
+            cardText.setTextAlign(Paint.Align.LEFT);
+
+            // Bottom Situation Strip
+            tmp.set(r.left + 24 * k, r.top + 215 * k, r.right - 24 * k, r.top + 275 * k);
+            fill.setColor(tone(0x0C000000, 0x14FFFFFF));
+            c.drawRoundRect(tmp, 14 * k, 14 * k, fill);
+            border.setColor(tone(0x14000000, 0x1EFFFFFF));
+            c.drawRoundRect(tmp, 14 * k, 14 * k, border);
+
+            c.drawText(data.cricket.batsman, tmp.left + 16 * k, tmp.centerY() + Ui.halfCap(stripLeftPaint), stripLeftPaint);
+            c.drawText(data.cricket.status, tmp.right - 16 * k, tmp.centerY() + Ui.halfCap(stripRightPaint), stripRightPaint);
+
+        } else {
+            // Market Watch Card (When no match is live)
+            c.drawText("📈 " + Ui.tr("Market Watch & Commodities"), r.left + 28 * k, r.top + 48 * k, cardTitle);
+            String mktStatus = data.markets.marketsOpen ? ("● " + Ui.tr("Markets Open")) : ("● " + Ui.tr("Market Closed"));
+            stripRightPaint.setColor(data.markets.marketsOpen ? 0xFF30D158 : tone(L_FAINT, 0x99FFFFFF));
+            c.drawText(mktStatus, r.right - 28 * k, r.top + 48 * k, stripRightPaint);
+
+            // 3 boxes
+            float pad = 24 * k, gap = 14 * k;
+            float boxW = (r.width() - 2 * pad - 2 * gap) / 3f;
+            for (int i = 0; i < 3; i++) {
+                float bx = r.left + pad + i * (boxW + gap);
+                tmp.set(bx, r.top + 70 * k, bx + boxW, r.top + 218 * k);
+                fill.setColor(tone(0x0C000000, 0x14FFFFFF));
+                c.drawRoundRect(tmp, 16 * k, 16 * k, fill);
+                border.setColor(tone(0x14000000, 0x1EFFFFFF));
+                c.drawRoundRect(tmp, 16 * k, 16 * k, border);
+
+                String bTitle = (i == 0 ? "NIFTY 50" : (i == 1 ? "SENSEX" : "GOLD (24K / 10g)"));
+                c.drawText(bTitle, bx + 16 * k, r.top + 104 * k, cardDim);
+
+                String bVal = (i == 0 ? data.markets.nifty : (i == 1 ? data.markets.sensex : data.markets.gold));
+                c.drawText(bVal, bx + 16 * k, r.top + 148 * k, marketValPaint);
+
+                double chg = (i == 0 ? data.markets.niftyChange : (i == 1 ? data.markets.sensexChange : data.markets.goldChange));
+                String chgStr = (chg >= 0 ? "▲ +" : "▼ ") + String.format(java.util.Locale.US, "%.2f%%", Math.abs(chg));
+                marketChangePaint.setColor(chg >= 0 ? 0xFF30D158 : 0xFFFF453A);
+                c.drawText(chgStr, bx + 16 * k, r.top + 190 * k, marketChangePaint);
+            }
+
+            // Bottom strip info
+            c.drawText(Ui.tr("No live India match right now"), r.left + 28 * k, r.top + 262 * k, cardDim);
+            c.drawText("USD / INR: ₹84.10", r.right - 28 * k, r.top + 262 * k, cardDimRight);
         }
     }
 

@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreeMyTV - Enhanced TV UI & Smart Widget Simulator</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body {
+      background-color: #05070a;
+      color: #f5f5f7;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+      padding: 20px 0;
+    }
+
+    /* Controls header */
+    .controls-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 10px 24px;
+      border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .badge {
+      font-size: 13px;
+      font-weight: 600;
+      background: #30d158;
+      color: #000;
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+    .btn {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #fff;
+      padding: 7px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.22);
+      transform: translateY(-1px);
+    }
+    .btn.active {
+      background: #ffffff;
+      color: #0b0e14;
+      font-weight: 600;
+      border-color: #ffffff;
+      box-shadow: 0 4px 14px rgba(255, 255, 255, 0.3);
+    }
+    .btn-toggle-drawer {
+      background: #4e88ff;
+      border-color: #4e88ff;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    /* TV 16:9 Screen Container */
+    .tv-viewport {
+      width: 1280px;
+      height: 720px;
+      position: relative;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 30px 100px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.12);
+      background: #090d14;
+    }
+
+    /* Dynamic Wallpaper / Backdrop */
+    .tv-backdrop {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      transform: scale(1.02);
+    }
+    .tv-scrim {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 80% 20%, transparent 0%, rgba(9, 13, 20, 0.4) 60%, rgba(9, 13, 20, 0.92) 100%),
+                  linear-gradient(to right, rgba(9, 13, 20, 0.95) 0%, rgba(9, 13, 20, 0.75) 45%, rgba(9, 13, 20, 0.2) 80%),
+                  linear-gradient(to top, rgba(9, 13, 20, 0.95) 0%, rgba(9, 13, 20, 0.5) 30%, transparent 60%);
+      pointer-events: none;
+    }
+
+    /* TV Main Layer that shifts up when drawer opens */
+    .tv-content-layer {
+      position: absolute;
+      inset: 0;
+      padding: 36px 54px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease;
+      z-index: 10;
+    }
+    .drawer-open .tv-content-layer {
+      transform: translateY(-290px);
+      opacity: 0.35;
+    }
+
+    /* Top Navigation Bar */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .top-left {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .greeting {
+      font-size: 38px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    }
+    .tab-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tab {
+      padding: 6px 18px;
+      border-radius: 999px;
+      font-size: 15px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.65);
+      cursor: pointer;
+    }
+    .tab.active {
+      background: rgba(255, 255, 255, 0.95);
+      color: #0b0e14;
+      font-weight: 600;
+    }
+
+    .top-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .top-circle-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.16);
+      backdrop-filter: blur(25px);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .top-circle-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    /* Hero Show Details */
+    .hero-info {
+      max-width: 580px;
+      margin-top: 10px;
+    }
+    .hero-title {
+      font-size: 34px;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 8px;
+    }
+    .hero-meta {
+      font-size: 14px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.82);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .rating-badge {
+      color: #ffb800;
+      font-weight: 600;
+    }
+    .hero-desc {
+      font-size: 13px;
+      line-height: 1.5;
+      color: rgba(255, 255, 255, 0.72);
+      margin-bottom: 20px;
+    }
+    .hero-buttons {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .btn-watch {
+      padding: 9px 22px;
+      background: #ffffff;
+      color: #090d14;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-mylist {
+      padding: 9px 20px;
+      background: rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 999px;
+    }
+
+    /* Apple TV Dock (Shelf) */
+    .dock-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .dock-glass {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 22px;
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(40px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 28px;
+    }
+    .app-icon {
+      width: 115px;
+      height: 65px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    }
+    .app-icon.focused {
+      transform: scale(1.16) translateY(-4px);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
+      border: 2px solid #fff;
+    }
+    .app-yt { background: #ff0000; color: #fff; }
+    .app-nflx { background: #141414; color: #e50914; font-size: 16px; }
+    .app-prime { background: #00a8e1; color: #fff; }
+    .app-hotstar { background: linear-gradient(135deg, #0b246a, #0c7ef0); color: #fff; }
+    .app-sonyliv { background: #000; color: #ff0055; }
+    .app-netmirror { background: #121620; color: #ff3344; }
+    .app-ze5 { background: #18191d; color: #fff; }
+    .app-set { background: #232733; color: #a0aec0; }
+
+    /* The Bottom Drawer */
+    .tv-drawer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 380px;
+      background: linear-gradient(to top, rgba(11, 15, 24, 0.98) 0%, rgba(13, 18, 28, 0.94) 80%, rgba(13, 18, 28, 0) 100%);
+      backdrop-filter: blur(50px);
+      padding: 26px 54px;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 20;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .drawer-open .tv-drawer {
+      transform: translateY(0);
+    }
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .drawer-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.95);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .mode-indicator {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #38bdf8;
+    }
+
+    /* Drawer 2-Card Layout */
+    .drawer-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      height: 265px;
+    }
+
+    .card-base {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(35px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 20px 24px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    /* CARD 1: Enhanced Weather + AQI + Sunset */
+    .card-weather-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .weather-left .loc {
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .weather-temp {
+      font-size: 48px;
+      font-weight: 200;
+      margin: 2px 0;
+      letter-spacing: -1.5px;
+      line-height: 1;
+    }
+    .weather-cond {
+      font-size: 14px;
+      font-weight: 500;
+      color: #7dd3fc;
+    }
+    
+    /* AQI & Sun Pills in Card 1 */
+    .env-pills {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .aqi-pill {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .aqi-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #30d158; /* green / moderate */
+      box-shadow: 0 0 10px rgba(48, 209, 88, 0.6);
+    }
+    .aqi-val {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .aqi-lbl {
+      font-size: 12px;
+      color: #30d158;
+      font-weight: 600;
+    }
+    .sun-pill {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: #ff9f0a;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+
+    .weather-hourly {
+      display: flex;
+      justify-content: space-between;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .hour-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    /* CARD 2: Smart Switcher (Cricket vs Markets) */
+    .card-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .live-badge {
+      background: #ff3b30;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .live-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #fff;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+
+    /* Cricket Match Layout */
+    .cricket-teams {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 10px 0;
+    }
+    .c-team {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .c-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #1e3a8a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 15px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+    .c-name {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .c-score {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .c-overs {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    .cricket-strip {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+
+    /* Market Watch Layout (No Match state) */
+    .market-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin: 10px 0;
+    }
+    .market-box {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .m-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    .m-val {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 2px 0;
+    }
+    .m-change {
+      font-size: 12px;
+      font-weight: 600;
+      color: #30d158;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Switcher for User to Test Both States -->
+  <div class="controls-bar">
+    <span class="badge">PROPOSED NEW LAYOUT</span>
+    <button class="btn btn-toggle-drawer" onclick="toggleDrawer()">
+      <span id="drawerBtnIcon">▼</span>
+      <span id="drawerBtnText">Close Bottom Drawer</span>
+    </button>
+    <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2);"></div>
+    <span style="font-size: 13px; color: rgba(255,255,255,0.7);">Test Right Card:</span>
+    <button class="btn active" id="btnMatch" onclick="setSecondCardMode('match')">🏏 Live Match On (Cricket Score)</button>
+    <button class="btn" id="btnNoMatch" onclick="setSecondCardMode('nomatch')">📈 No Match (Nifty / Sensex / Gold)</button>
+  </div>
+
+  <!-- TV 1080p Screen Viewport -->
+  <div class="tv-viewport drawer-open" id="tvViewport">
+    
+    <!-- TV Dynamic Wallpaper -->
+    <div class="tv-backdrop" style="background-image: url('/free-my-tv/app/assets/themes/aurora.jpg');"></div>
+    <div class="tv-scrim"></div>
+
+    <!-- Main TV Home Screen Content Layer -->
+    <div class="tv-content-layer">
+      
+      <div class="top-bar">
+        <div class="top-left">
+          <div class="greeting">Good afternoon, Vishal</div>
+          <div class="tab-bar">
+            <div class="tab active">Home</div>
+            <div class="tab">Movies</div>
+            <div class="tab">Shows</div>
+            <div class="tab">My Favourites</div>
+          </div>
+        </div>
+        <div class="top-right">
+          <div class="top-circle-btn"><svg viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg></div>
+          <div class="top-circle-btn"><svg viewBox="0 0 24 24"><path d="M8 3h8v6H8zM6 9h12v12H6z"/></svg></div>
+          <div class="top-circle-btn"><svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19A2 2 0 006 21h12a2 2 0 001.65-2l-.62-1.39A8.96 8.96 0 0021 12c0-4.97-4.03-9-9-9zm-5 9c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm3-4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm4 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm3 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/></svg></div>
+          <div class="top-circle-btn"><svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></div>
+        </div>
+      </div>
+
+      <div class="hero-info">
+        <div class="hero-title">Bethlehem Kudumba Unit</div>
+        <div class="hero-meta">
+          <span class="rating-badge">★ 8.1</span>
+          <span>· 2026</span>
+          <span>· Romance / Drama</span>
+          <span>· JioHotstar</span>
+        </div>
+        <div class="hero-desc">
+          Ashley's homecoming from abroad takes an emotional turn when a wedding next door stirs up memories of her first love, Justin.
+        </div>
+        <div class="hero-buttons">
+          <div class="btn-watch">▶ Watch Now</div>
+          <div class="btn-mylist">+ My List</div>
+        </div>
+      </div>
+
+      <div class="dock-container">
+        <div class="dock-glass">
+          <div class="app-icon app-yt">YouTube</div>
+          <div class="app-icon app-nflx focused">NETFLIX</div>
+          <div class="app-icon app-prime">prime video</div>
+          <div class="app-icon app-hotstar">JioHotstar</div>
+          <div class="app-icon app-sonyliv">Sony LIV</div>
+          <div class="app-icon app-netmirror">NET MIRROR</div>
+          <div class="app-icon app-ze5">ZEE5</div>
+          <div class="app-icon app-set">Settings</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- The Sliding Bottom Drawer -->
+    <div class="tv-drawer">
+      <div class="drawer-header">
+        <div class="drawer-title">
+          <span>Overview & Smart Cards</span>
+          <span class="mode-indicator" id="modeIndicatorLabel">Cricket Mode Active</span>
+        </div>
+        <div style="font-size: 13px; color: rgba(255, 255, 255, 0.5);">Press [▲] on remote to return to Home</div>
+      </div>
+
+      <div class="drawer-cards">
+        
+        <!-- CARD 1: Enhanced Weather + AQI + Sunset -->
+        <div class="card-base">
+          <div class="card-weather-top">
+            <div class="weather-left">
+              <div class="loc">Mumbai · Today</div>
+              <div class="weather-temp">31°</div>
+              <div class="weather-cond">Sunny & Warm · H:34° L:25°</div>
+            </div>
+            
+            <!-- Real-time AQI badge & Sunset Tracker integrated into Card 1 -->
+            <div class="env-pills">
+              <div class="aqi-pill" title="Air Quality Index">
+                <div class="aqi-dot"></div>
+                <div class="aqi-val">54 AQI</div>
+                <div class="aqi-lbl">Moderate</div>
+              </div>
+              <div class="sun-pill" title="Sunset Countdown">
+                <span>☀️ Sunset in 2h 24m · 6:12 PM</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="weather-hourly">
+            <div class="hour-item"><span>Now</span><span>31°</span></div>
+            <div class="hour-item"><span>2 PM</span><span>33°</span></div>
+            <div class="hour-item"><span>4 PM</span><span>32°</span></div>
+            <div class="hour-item"><span>6 PM</span><span>29°</span></div>
+            <div class="hour-item"><span>8 PM</span><span>27°</span></div>
+            <div class="hour-item"><span>10 PM</span><span>26°</span></div>
+          </div>
+        </div>
+
+        <!-- CARD 2: Smart Card (Live Cricket Match OR NIFTY/SENSEX when no match) -->
+        <div class="card-base" id="smartCardContent">
+          <!-- Dynamic Content -->
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let drawerOpen = true;
+    let cardMode = 'match';
+
+    const cricketHTML = `
+      <div class="card-title-row">
+        <div class="card-title">🏏 3rd T20I · Wankhede Stadium</div>
+        <div class="live-badge">LIVE</div>
+      </div>
+      <div class="cricket-teams">
+        <div class="c-team">
+          <div class="c-badge">IND</div>
+          <div>
+            <div class="c-name">India</div>
+            <div class="c-score">186/3 <span class="c-overs">(18.2)</span></div>
+          </div>
+        </div>
+        <div style="font-weight: 700; color: rgba(255,255,255,0.3); font-size: 14px;">VS</div>
+        <div class="c-team" style="opacity: 0.65; flex-direction: row-reverse; text-align: right;">
+          <div class="c-badge" style="background: #eab308; color: #000;">AUS</div>
+          <div>
+            <div class="c-name">Australia</div>
+            <div class="c-score">182/7 <span class="c-overs">(20.0)</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cricket-strip">
+        <span style="color: #38bdf8; font-weight: 600;">Hardik Pandya 34* (16) · Rinku Singh 18* (8)</span>
+        <span style="color: #30d158; font-weight: 700;">IND need 7 runs in 10 balls</span>
+      </div>
+    `;
+
+    const marketsHTML = `
+      <div class="card-title-row">
+        <div class="card-title">📈 Indian Market Watch & Commodities</div>
+        <div style="font-size: 12px; color: #30d158; font-weight: 600;">● Markets Open</div>
+      </div>
+      <div class="market-grid">
+        <div class="market-box">
+          <div class="m-title">NIFTY 50</div>
+          <div class="m-val">24,852.15</div>
+          <div class="m-change">▲ +142.30 (+0.58%)</div>
+        </div>
+        <div class="market-box">
+          <div class="m-title">SENSEX</div>
+          <div class="m-val">81,332.70</div>
+          <div class="m-change">▲ +480.15 (+0.59%)</div>
+        </div>
+        <div class="market-box">
+          <div class="m-title">GOLD (24K / 10g)</div>
+          <div class="m-val">₹78,450</div>
+          <div class="m-change" style="color: #ff9f0a;">▲ +210 (+0.27%)</div>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: rgba(255,255,255,0.5); display: flex; justify-content: space-between;">
+        <span>No live cricket match right now</span>
+        <span>USD / INR: ₹84.06</span>
+      </div>
+    `;
+
+    function updateSmartCard() {
+      const container = document.getElementById('smartCardContent');
+      const indicator = document.getElementById('modeIndicatorLabel');
+      if (cardMode === 'match') {
+        container.innerHTML = cricketHTML;
+        indicator.innerText = 'Cricket Live Mode Active';
+        indicator.style.color = '#38bdf8';
+      } else {
+        container.innerHTML = marketsHTML;
+        indicator.innerText = 'Market Watch Mode (No match currently)';
+        indicator.style.color = '#30d158';
+      }
+    }
+
+    function setSecondCardMode(mode) {
+      cardMode = mode;
+      document.getElementById('btnMatch').classList.toggle('active', mode === 'match');
+      document.getElementById('btnNoMatch').classList.toggle('active', mode === 'nomatch');
+      updateSmartCard();
+      if (!drawerOpen) toggleDrawer();
+    }
+
+    function toggleDrawer() {
+      drawerOpen = !drawerOpen;
+      const vp = document.getElementById('tvViewport');
+      const btnText = document.getElementById('drawerBtnText');
+      const btnIcon = document.getElementById('drawerBtnIcon');
+      if (drawerOpen) {
+        vp.classList.add('drawer-open');
+        btnText.innerText = 'Close Bottom Drawer';
+        btnIcon.innerText = '▲';
+      } else {
+        vp.classList.remove('drawer-open');
+        btnText.innerText = 'Open Bottom Drawer';
+        btnIcon.innerText = '▼';
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' && !drawerOpen) toggleDrawer();
+      else if (e.key === 'ArrowUp' && drawerOpen) toggleDrawer();
+    });
+
+    updateSmartCard();
+  </script>
+</body>
+</html>

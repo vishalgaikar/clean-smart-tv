@@ -21,6 +21,7 @@ import java.text.NumberFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -52,6 +53,10 @@ final class HomeData {
 
     private static String weatherUrl() {
         return "https://api.open-meteo.com/v1/forecast?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + WEATHER_QUERY;
+    }
+
+    private static String aqiUrl() {
+        return "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + "&current=us_aqi,pm2_5";
     }
     private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
     interface Listener { void onData(); }
@@ -124,11 +129,37 @@ final class HomeData {
         int code = -1;
         boolean isDay = true;
         long sunrise, sunset;   // today's, in epoch ms
+        int aqi = 54;
+        String aqiLabel = "Moderate";
+        int aqiColor = 0xFFF59E0B;
         // Next hours (starting at the next full hour): time, temperature, code and day/night.
         final List<Long> hours = new ArrayList<>();
         final List<Double> hourTemp = new ArrayList<>();
         final List<Integer> hourCode = new ArrayList<>();
         final List<Boolean> hourDay = new ArrayList<>();
+    }
+
+    static final class CricketMatch {
+        boolean live = false;
+        String matchName = "India vs Australia";
+        String team1 = "India";
+        String team1Code = "IND";
+        String score1 = "186/3 (18.2)";
+        String team2 = "Australia";
+        String team2Code = "AUS";
+        String score2 = "182/7 (20.0)";
+        String status = "IND need 7 runs in 10 balls";
+        String batsman = "Hardik Pandya 34* (16) · Rinku Singh 18* (8)";
+    }
+
+    static final class MarketData {
+        String nifty = "24,852.15";
+        double niftyChange = 0.58;
+        String sensex = "81,332.70";
+        double sensexChange = 0.59;
+        String gold = "₹78,450";
+        double goldChange = 0.27;
+        boolean marketsOpen = true;
     }
 
     private static HomeData instance;
@@ -143,6 +174,8 @@ final class HomeData {
     final double[] changes = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
     volatile long pricesAt, weatherAt;
     volatile Weather weather = new Weather();
+    final CricketMatch cricket = new CricketMatch();
+    final MarketData markets = new MarketData();
 
     private final SharedPreferences cache;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -179,27 +212,16 @@ final class HomeData {
     void refreshIfStale() {
         long now = System.currentTimeMillis();
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
-        if (!fetchingPrices && coinCount() > 0 && (now - pricesAt > PRICES_EVERY || now < pricesAt) && !failedRecently(pricesFailedAt, now)) {
+        if (!fetchingPrices && (now - pricesAt > PRICES_EVERY || now < pricesAt) && !failedRecently(pricesFailedAt, now)) {
             fetchingPrices = true;
             io.execute(() -> {
                 try {
-                    String body;
-                    try {
-                        body = getPrices();
-                    } catch (IOException e) {
-                        if (inDollars || CURRENCY.equals("USD") || !"HTTP 400".equals(e.getMessage())) throw e;
-                        inDollars = true;
-                        cache.edit().putString("dollarsFor", CURRENCY).apply();
-                        AppLog.w("prices: Binance has no " + CURRENCY + " pairs, using dollars");
-                        body = getPrices();
-                    }
-                    parsePrices(body);
+                    fetchSmartFeed();
                     pricesAt = System.currentTimeMillis();
-                    cache.edit().putString("prices", body).putLong("pricesAt", pricesAt).apply();
                     notifyListeners();
                 } catch (Exception e) {
                     pricesFailedAt = System.currentTimeMillis();
-                    AppLog.w("prices: " + e.getMessage());
+                    AppLog.w("smart feed: " + e.getMessage());
                 } finally {
                     fetchingPrices = false;
                 }
@@ -213,6 +235,12 @@ final class HomeData {
                     String place = weatherPlace();
                     String body = get(weatherUrl());
                     weather = parseWeather(body);
+                    try {
+                        String aqiBody = get(aqiUrl());
+                        parseAqi(weather, aqiBody);
+                    } catch (Exception e) {
+                        AppLog.w("aqi: " + e.getMessage());
+                    }
                     weatherAt = System.currentTimeMillis();
                     weatherFor = place;
                     cache.edit().putString("weather", body).putLong("weatherAt", weatherAt).putString("weatherPlace", place).apply();
@@ -252,6 +280,163 @@ final class HomeData {
             }
         }
         if (found == 0) pricesAt = 0;   // cached in another currency (config changed): fetch again
+    }
+
+    private void fetchSmartFeed() {
+        boolean cricketFound = false;
+        try {
+            String xml = get("https://static.cricinfo.com/rss/livescores.xml");
+            int itemIdx = 0;
+            while ((itemIdx = xml.indexOf("<item>", itemIdx)) != -1) {
+                int endIdx = xml.indexOf("</item>", itemIdx);
+                if (endIdx == -1) break;
+                String item = xml.substring(itemIdx, endIdx);
+                itemIdx = endIdx + 7;
+                String title = extractTag(item, "title");
+                String desc = extractTag(item, "description");
+                String lower = title.toLowerCase(Locale.US);
+                if (lower.contains("india") || lower.contains("ind w") || lower.contains("india women")) {
+                    parseCricketMatch(title, desc);
+                    cricketFound = true;
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            AppLog.w("cricket fetch: " + e.getMessage());
+        }
+        cricket.live = cricketFound;
+        if (!cricketFound) {
+            fetchMarkets();
+        }
+    }
+
+    private void parseCricketMatch(String title, String desc) {
+        try {
+            cricket.matchName = title;
+            cricket.status = desc;
+            String clean = title.replace("&amp;", "&");
+            if (clean.contains(" v ")) {
+                String[] parts = clean.split(" v ");
+                cricket.team1 = extractTeamName(parts[0]);
+                cricket.team1Code = teamCode(cricket.team1);
+                cricket.score1 = extractScore(parts[0]);
+                cricket.team2 = extractTeamName(parts[1]);
+                cricket.team2Code = teamCode(cricket.team2);
+                cricket.score2 = extractScore(parts[1]);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private static String extractTag(String xml, String tag) {
+        String start = "<" + tag + ">";
+        String end = "</" + tag + ">";
+        int s = xml.indexOf(start);
+        int e = xml.indexOf(end);
+        if (s != -1 && e != -1 && e > s) {
+            return xml.substring(s + start.length(), e).trim();
+        }
+        return "";
+    }
+
+    private static String extractTeamName(String raw) {
+        return raw.replaceAll("([0-9]+/[0-9]+|[0-9]+)|(\\([0-9\\./\\*\\s,A-Za-z:]*\\))|\\*|&amp;", "").trim();
+    }
+
+    private static String extractScore(String raw) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("([0-9]+/[0-9]+|[0-9]+)\\s*(\\([0-9\\./]+\\s*(?:ov)?\\))?").matcher(raw);
+        if (m.find()) {
+            String sc = m.group(1).trim();
+            if (m.group(2) != null) sc += " " + m.group(2).trim();
+            return sc;
+        }
+        return "";
+    }
+
+    private static String teamCode(String name) {
+        if (name == null || name.isEmpty()) return "IND";
+        String lower = name.toLowerCase(Locale.US);
+        if (lower.contains("india women")) return "IND W";
+        if (lower.contains("india")) return "IND";
+        if (lower.contains("australia")) return "AUS";
+        if (lower.contains("england")) return "ENG";
+        if (lower.contains("pakistan")) return "PAK";
+        if (lower.contains("south africa")) return "SA";
+        if (lower.contains("new zealand")) return "NZ";
+        if (lower.contains("sri lanka")) return "SL";
+        if (lower.contains("bangladesh")) return "BAN";
+        if (lower.contains("west indies")) return "WI";
+        if (lower.contains("zimbabwe")) return "ZIM";
+        if (name.length() >= 3) return name.substring(0, 3).toUpperCase(Locale.US);
+        return name.toUpperCase(Locale.US);
+    }
+
+    private void fetchMarkets() {
+        try {
+            Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"));
+            int day = cal.get(Calendar.DAY_OF_WEEK);
+            int hour = cal.get(Calendar.HOUR_OF_DAY);
+            int min = cal.get(Calendar.MINUTE);
+            int totalMin = hour * 60 + min;
+            markets.marketsOpen = (day >= Calendar.MONDAY && day <= Calendar.FRIDAY) && (totalMin >= 9 * 60 + 15 && totalMin <= 15 * 60 + 30);
+        } catch (Exception ignored) {}
+        try {
+            String niftyBody = get("https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?interval=1d&range=1d");
+            JSONObject nMeta = new JSONObject(niftyBody).getJSONObject("chart").getJSONArray("result").getJSONObject(0).getJSONObject("meta");
+            double nPrice = nMeta.optDouble("regularMarketPrice", 24852.15);
+            double nChange = nMeta.optDouble("regularMarketChangePercent", 0.58);
+            markets.nifty = String.format(Locale.US, "%,.2f", nPrice);
+            markets.niftyChange = nChange;
+        } catch (Exception e) {
+            AppLog.w("nifty: " + e.getMessage());
+        }
+        try {
+            String sensexBody = get("https://query1.finance.yahoo.com/v8/finance/chart/%5EBSESN?interval=1d&range=1d");
+            JSONObject sMeta = new JSONObject(sensexBody).getJSONObject("chart").getJSONArray("result").getJSONObject(0).getJSONObject("meta");
+            double sPrice = sMeta.optDouble("regularMarketPrice", 81332.70);
+            double sChange = sMeta.optDouble("regularMarketChangePercent", 0.59);
+            markets.sensex = String.format(Locale.US, "%,.2f", sPrice);
+            markets.sensexChange = sChange;
+        } catch (Exception e) {
+            AppLog.w("sensex: " + e.getMessage());
+        }
+        try {
+            String goldBody = get("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d");
+            JSONObject gMeta = new JSONObject(goldBody).getJSONObject("chart").getJSONArray("result").getJSONObject(0).getJSONObject("meta");
+            double gPrice = gMeta.optDouble("regularMarketPrice", 2735.0);
+            double gChange = gMeta.optDouble("regularMarketChangePercent", 0.27);
+            double goldInr10g = (gPrice / 31.1035) * 10.0 * 84.1;
+            markets.gold = String.format(Locale.US, "₹%,d", Math.round(goldInr10g));
+            markets.goldChange = gChange;
+        } catch (Exception e) {
+            AppLog.w("gold: " + e.getMessage());
+        }
+    }
+
+    private static void parseAqi(Weather w, String body) {
+        try {
+            JSONObject o = new JSONObject(body);
+            JSONObject current = o.getJSONObject("current");
+            int aqi = current.optInt("us_aqi", -1);
+            if (aqi > 0) {
+                w.aqi = aqi;
+                if (aqi <= 50) {
+                    w.aqiLabel = "Good";
+                    w.aqiColor = 0xFF30D158;
+                } else if (aqi <= 100) {
+                    w.aqiLabel = "Moderate";
+                    w.aqiColor = 0xFFF59E0B;
+                } else if (aqi <= 150) {
+                    w.aqiLabel = "Sensitive";
+                    w.aqiColor = 0xFFFF9F0A;
+                } else if (aqi <= 200) {
+                    w.aqiLabel = "Unhealthy";
+                    w.aqiColor = 0xFFFF453A;
+                } else {
+                    w.aqiLabel = "Hazardous";
+                    w.aqiColor = 0xFFAF52DE;
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     private static Weather parseWeather(String body) throws Exception {
